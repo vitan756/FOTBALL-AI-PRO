@@ -1,27 +1,26 @@
-# FOOTBALL AI PRO — versiunea 1.0
+# FOOTBALL AI PRO v2
 
-## Pornire pe calculator
-1. Instalează Python 3.10 sau mai nou.
-2. Deschide terminalul în folderul proiectului.
-3. Rulează:
-   ```bash
-   pip install -r requirements.txt
-   streamlit run app.py
-   ```
-4. Aplicația se deschide în browser.
+Aplicație Streamlit pentru analiză fotbalistică folosind API-FOOTBALL v3.
 
-## Date automate
-Pentru programul meciurilor și mediile echipelor este necesară o cheie API-FOOTBALL:
-https://www.api-football.com/
+## Instalare locală
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+```
 
-Introdu cheia în câmpul din bara laterală. Aplicația nu o salvează în fișier.
-Disponibilitatea statisticilor depinde de competiție și planul API.
+## Publicare în Streamlit Community Cloud
+- Repository: contul GitHub / FOOTBALL-AI-PRO
+- Branch: main
+- Main file path: app.py
 
-## Fără cheie
-Fila „Analiză manuală” funcționează fără cont/API. Introdu mediile pe meci:
-- gazde: goluri marcate și primite acasă;
-- oaspeți: goluri marcate și primite în deplasare;
-- mediile ligii pentru gazde și oaspeți.
+## Utilizare
+1. Introdu cheia API-FOOTBALL în câmpul secret din bara laterală.
+2. Alege data și apasă „Încarcă meciurile”.
+3. Selectează un meci și apasă „Analizează meciul selectat”.
+4. Pentru test istoric, folosește ID-ul competiției și sezonul în tabul „Validare istorică”.
 
-## Limitări
-Versiunea 1.0 folosește un model Poisson simplificat, cu rate normalizate la mediile ligii. Nu verifică automat accidentări, suspendări, xG, forma ultimelor partide sau cote. Datele API pot fi incomplete. Probabilitățile sunt estimări, nu certitudini și nu garantează câștiguri.
+## Notă privind datele și limitele
+- Accesul la endpoint-uri depinde de abonamentul API și de acoperirea competiției/sezonului.
+- Modelul Poisson este o estimare statistică simplificată, nu o garanție.
+- xG și cornere nu sunt fabricate; nu sunt incluse în modelul propriu în această versiune.
+- Cheia API nu se introduce în fișiere și nu se comite în GitHub.
