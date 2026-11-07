@@ -695,4 +695,101 @@ if "predictii" in globals() and predictii:
             key="descarca_top20_extra"
             )
         
+# ==========================================
+# MODUL PIEȚE GOLURI - FOOTBALL AI PRO
+# ==========================================
+
+if "predictii" in globals() and predictii:
+
+    import math
+    import pandas as pd
+    import streamlit as st
+
+    rezultate_goluri = []
+
+    for meci in predictii:
+
+        try:
+            over25 = float(
+                meci["Peste 2.5"].replace("%", "")
+            ) / 100
+
+            # Estimare lambda total din probabilitatea Peste 2.5
+            stanga = 0.01
+            dreapta = 10.0
+
+            for _ in range(100):
+                mijloc = (stanga + dreapta) / 2
+
+                sub25_model = math.exp(-mijloc) * (
+                    1 + mijloc + (mijloc ** 2) / 2
+                )
+
+                over25_model = 1 - sub25_model
+
+                if over25_model < over25:
+                    stanga = mijloc
+                else:
+                    dreapta = mijloc
+
+            lam_total = (stanga + dreapta) / 2
+
+            sub05 = math.exp(-lam_total)
+            sub15 = sub05 * (1 + lam_total)
+
+            sub35 = sub15 * (
+                1 + (lam_total ** 2) / 2
+            )
+
+            optiuni_goluri = {
+                "Peste 0.5": 1 - sub05,
+                "Sub 0.5": sub05,
+                "Peste 1.5": 1 - sub15,
+                "Sub 1.5": sub15,
+                "Peste 2.5": over25,
+                "Sub 2.5": 1 - over25,
+                "Peste 3.5": 1 - sub35,
+                "Sub 3.5": sub35
+            }
+
+            rezultate_goluri.append({
+                "Meci": meci["Meci"],
+                "Data": meci["Data"],
+                "Peste 0.5": f"{optiuni_goluri['Peste 0.5']*100:.1f}%",
+                "Sub 0.5": f"{optiuni_goluri['Sub 0.5']*100:.1f}%",
+                "Peste 1.5": f"{optiuni_goluri['Peste 1.5']*100:.1f}%",
+                "Sub 1.5": f"{optiuni_goluri['Sub 1.5']*100:.1f}%",
+                "Peste 2.5": f"{optiuni_goluri['Peste 2.5']*100:.1f}%",
+                "Sub 2.5": f"{optiuni_goluri['Sub 2.5']*100:.1f}%",
+                "Peste 3.5": f"{optiuni_goluri['Peste 3.5']*100:.1f}%",
+                "Sub 3.5": f"{optiuni_goluri['Sub 3.5']*100:.1f}%"
+            })
+
+        except (KeyError, ValueError, TypeError):
+            continue
+
+    if rezultate_goluri:
+
+        st.divider()
+        st.header("ANALIZĂ AVANSATĂ - TOTAL GOLURI")
+
+        tabel_goluri = pd.DataFrame(rezultate_goluri)
+
+        st.dataframe(
+            tabel_goluri,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        st.download_button(
+            "Descarcă analiza golurilor CSV",
+            data=tabel_goluri.to_csv(
+                index=False
+            ).encode("utf-8-sig"),
+            file_name="football_ai_pro_goluri.csv",
+            mime="text/csv",
+            key="descarca_goluri_extra"
+        )
+        
+        
     
