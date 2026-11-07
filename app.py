@@ -232,3 +232,36 @@ with tab3:
             st.success(f"Conexiune reușită. API-ul a returnat {count} competiții.")
         except Exception as exc:
             st.error(str(exc))
+
+# SURSA GRATUITA OPENLIGADB
+@st.cache_data(ttl=3600)
+def meciuri_gratuite(sezon):
+    url = f"https://api.openligadb.de/getavailableleagues/{sezon}"
+    raspuns = requests.get(url, timeout=20)
+    raspuns.raise_for_status()
+    ligi = raspuns.json()
+    return pd.DataFrame([
+        {
+            "Campionat": liga.get("leagueName", ""),
+            "Cod": liga.get("leagueShortcut", ""),
+            "Sezon": liga.get("leagueSeason", sezon)
+        }
+        for liga in ligi
+    ])
+
+st.divider()
+st.subheader("⚽ Sursă gratuită de campionate")
+sezon_gratuit = st.selectbox(
+    "Alege sezonul",
+    [2026, 2025, 2024, 2023, 2022]
+)
+
+if st.button("Încarcă campionatele gratuite"):
+    try:
+        campionate = meciuri_gratuite(sezon_gratuit)
+        if campionate.empty:
+            st.warning("Nu sunt campionate disponibile pentru acest sezon.")
+        else:
+            st.dataframe(campionate, use_container_width=True)
+    except Exception as e:
+        st.error(f"Eroare la sursa gratuită: {e}")
