@@ -183,7 +183,7 @@ with tab1:
                     away_recent = team_recent(away["id"], api_key, selected_date)
                     hl, al = expected_goals(home_recent, away_recent, home["id"], away["id"])
                     probs = match_probabilities(hl, al)
-                                        api_prediction = None
+                                             api_prediction = None               
                     prediction_error = None
                     try:
                         prediction_rows, _ = api_get(
