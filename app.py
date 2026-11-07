@@ -136,6 +136,7 @@ st.caption("Analiză statistică orientativă pe baza meciurilor recente. Nu gar
 with st.sidebar:
     st.header("Conectare API")
     api_key = st.text_input("API-Football Key", type="password", help="Cheia rămâne doar în sesiunea curentă.")
+    ninjas_key = st.text_input("API Ninjas Key", type="password")
     st.caption("Nu trimite cheia nimănui și nu o publica pe GitHub.")
     st.divider()
     st.write("Plan Free: aplicația folosește intervale de date, nu parametrul `last`.")
