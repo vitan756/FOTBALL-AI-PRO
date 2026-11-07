@@ -569,23 +569,47 @@ except Exception as eroare:
     st.error(f"Eroare la motorul de predicții gratuite: {eroare}")
 
 
-# ==========================================
-# SURSA GRATUITA SUPLIMENTARA OPENFOOTBALL
-# ==========================================
+# CAMPIONATE SUPLIMENTARE GRATUITE
 
 OPENFOOTBALL_LIGI = {
-    "Anglia - Premier League": "eng.1",
-    "Anglia - Championship": "eng.2",
-    "Germania - Bundesliga": "de.1",
-    "Spania - LaLiga": "es.1",
-    "Italia - Serie A": "it.1",
-    "Franta - Ligue 1": "fr.1",
-    "Olanda - Eredivisie": "nl.1",
-    "Portugalia - Primeira Liga": "pt.1",
+    "Anglia": "eng.1",
+    "Germania": "de.1",
+    "Spania": "es.1",
+    "Italia": "it.1",
+    "Franta": "fr.1",
 }
 
-
 @st.cache_data(ttl=3600)
+def openfootball_rezultate(cod):
+    url = "https://raw.githubusercontent.com/openfootball/football.json/master/" + cod + "/2026-27.json"
+    r = requests.get(url, timeout=20)
+    r.raise_for_status()
+    return r.json().get("matches", [])
+
+st.divider()
+st.header("CAMPIONATE SUPLIMENTARE")
+
+liga = st.selectbox("Alege campionatul", list(OPENFOOTBALL_LIGI.keys()))
+
+if st.button("INCARCA MECIURILE"):
+    try:
+        meciuri = openfootball_rezultate(OPENFOOTBALL_LIGI[liga])
+        randuri = [
+            {
+                "Data": m.get("date", ""),
+                "Gazde": m.get("team1", ""),
+                "Oaspeti": m.get("team2", ""),
+                "Scor": str(m.get("score", "Nedisputat"))
+            }
+            for m in meciuri
+        ]
+        st.dataframe(pd.DataFrame(randuri), use_container_width=True)
+        st.success(f"Au fost incarcate {len(randuri)} meciuri.")
+    except Exception as e:
+        st.error(f"Eroare OpenFootball: {e}")
+
+
+
 def openfootball_rezultate(cod):
     url = (
         "https://raw.githubusercontent.com/"
