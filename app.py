@@ -62,6 +62,106 @@ def match_probabilities(home_lambda, away_lambda, max_goals=8):
                 gg += p
             scores.append((p, h, a))
     total = p_home + p_draw + p_away
+    def extra_markets(home_lambda, away_lambda):
+    """
+    Piețe suplimentare calculate din distribuția Poisson.
+    Valorile returnate sunt procente 0-100.
+    """
+
+    def matrix(lam_h, lam_a, max_goals=10):
+        rezultate = []
+        total = 0.0
+
+        for h in range(max_goals + 1):
+            for a in range(max_goals + 1):
+                p = poisson(lam_h, h) * poisson(lam_a, a)
+                rezultate.append((h, a, p))
+                total += p
+
+        if total <= 0:
+            return []
+
+        return [(h, a, p / total) for h, a, p in rezultate]
+
+    def prob(conditie, distributie):
+        return sum(p for h, a, p in distributie if conditie(h, a)) * 100
+
+    def procent(valoare):
+        return round(valoare, 1)
+
+    dist = matrix(home_lambda, away_lambda)
+
+    rezultate = {}
+
+    # Rezultat și șanse duble
+    p1 = prob(lambda h, a: h > a, dist)
+    px = prob(lambda h, a: h == a, dist)
+    p2 = prob(lambda h, a: h < a, dist)
+
+    rezultate["1X"] = procent(p1 + px)
+    rezultate["X2"] = procent(px + p2)
+    rezultate["12"] = procent(p1 + p2)
+
+    # Draw No Bet: egalul înseamnă banii înapoi
+    total_decis = p1 + p2
+    rezultate["DNB gazde"] = procent(
+        p1 / total_decis * 100 if total_decis else 0
+    )
+    rezultate["DNB oaspeți"] = procent(
+        p2 / total_decis * 100 if total_decis else 0
+    )
+
+    # Total goluri
+    for linie in [0.5, 1.5, 2.5, 3.5, 4.5]:
+        peste = prob(lambda h, a: h + a > linie, dist)
+        rezultate[f"Peste {linie}"] = procent(peste)
+        rezultate[f"Sub {linie}"] = procent(100 - peste)
+
+    # Goluri echipe
+    for linie in [0.5, 1.5]:
+        rezultate[f"Gazde peste {linie}"] = procent(
+            prob(lambda h, a: h > linie, dist)
+        )
+        rezultate[f"Oaspeți peste {linie}"] = procent(
+            prob(lambda h, a: a > linie, dist)
+        )
+
+    # Combinații calculate direct din scoruri
+    rezultate["1X + Peste 1.5"] = procent(
+        prob(lambda h, a: h >= a and h + a >= 2, dist)
+    )
+    rezultate["X2 + Sub 3.5"] = procent(
+        prob(lambda h, a: h <= a and h + a <= 3, dist)
+    )
+    rezultate["1 + Peste 1.5"] = procent(
+        prob(lambda h, a: h > a and h + a >= 2, dist)
+    )
+    rezultate["2 + Peste 1.5"] = procent(
+        prob(lambda h, a: h < a and h + a >= 2, dist)
+    )
+
+    # Pauză: estimare matematică la 45% din golurile așteptate
+    dist_pauza = matrix(home_lambda * 0.45, away_lambda * 0.45)
+
+    rezultate["Pauză 1"] = procent(
+        prob(lambda h, a: h > a, dist_pauza)
+    )
+    rezultate["Pauză X"] = procent(
+        prob(lambda h, a: h == a, dist_pauza)
+    )
+    rezultate["Pauză 2"] = procent(
+        prob(lambda h, a: h < a, dist_pauza)
+    )
+
+    for linie in [0.5, 1.5]:
+        peste = prob(
+            lambda h, a: h + a > linie,
+            dist_pauza
+        )
+        rezultate[f"Pauză peste {linie}"] = procent(peste)
+        rezultate[f"Pauză sub {linie}"] = procent(100 - peste)
+
+    return rezultate
     if total:
         p_home, p_draw, p_away = p_home/total, p_draw/total, p_away/total
     return {
