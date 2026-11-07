@@ -183,7 +183,7 @@ with tab1:
                     away_recent = team_recent(away["id"], api_key, selected_date)
                     hl, al = expected_goals(home_recent, away_recent, home["id"], away["id"])
                     probs = match_probabilities(hl, al)
-                     api_prediction = None      
+      
                 c1, c2, c3 = st.columns(3)
                 c1.metric("Victorie gazde (1)", f"{probs['1']*100:.1f}%")
                 c2.metric("Egal (X)", f"{probs['X']*100:.1f}%")
