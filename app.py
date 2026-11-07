@@ -603,3 +603,96 @@ except Exception as eroare:
         f"Eroare la motorul de predicții gratuite: {eroare}"
     )
     
+# ==========================================
+# MODULE SUPLIMENTARE FOOTBALL AI PRO
+# Nu modifica motorul principal
+# ==========================================
+
+if "predictii" in globals() and predictii:
+
+    import pandas as pd
+
+    rezultate_extra = []
+
+    for meci in predictii:
+
+        try:
+            p1 = float(meci["1"].replace("%", ""))
+            px = float(meci["X"].replace("%", ""))
+            p2 = float(meci["2"].replace("%", ""))
+            gg = float(meci["GG"].replace("%", ""))
+            over25 = float(meci["Peste 2.5"].replace("%", ""))
+
+            optiuni = {
+                "1X": p1 + px,
+                "X2": px + p2,
+                "12": p1 + p2,
+                "GG": gg,
+                "NG": 100 - gg,
+                "Peste 2.5": over25,
+                "Sub 2.5": 100 - over25
+            }
+
+            principal = max(optiuni, key=optiuni.get)
+            procent = optiuni[principal]
+
+            if procent >= 75:
+                risc = "Mic"
+            elif procent >= 60:
+                risc = "Mediu"
+            else:
+                risc = "Mare"
+
+            rezultate_extra.append({
+                "Data": meci["Data"],
+                "Meci": meci["Meci"],
+                "1X": f"{optiuni['1X']:.1f}%",
+                "X2": f"{optiuni['X2']:.1f}%",
+                "12": f"{optiuni['12']:.1f}%",
+                "GG": f"{gg:.1f}%",
+                "NG": f"{100-gg:.1f}%",
+                "Peste 2.5": f"{over25:.1f}%",
+                "Sub 2.5": f"{100-over25:.1f}%",
+                "Pronostic principal": principal,
+                "Probabilitate": f"{procent:.1f}%",
+                "Risc": risc,
+                "Scor estimat": meci["Scor estimat"]
+            })
+
+        except (KeyError, ValueError, TypeError):
+            continue
+
+    if rezultate_extra:
+
+        st.divider()
+        st.header("FOOTBALL AI PRO - MODULE SUPLIMENTARE")
+
+        st.subheader("Top 20 pronosticuri")
+
+        top20_extra = sorted(
+            rezultate_extra,
+            key=lambda x: float(
+                x["Probabilitate"].replace("%", "")
+            ),
+            reverse=True
+        )[:20]
+
+        tabel_extra = pd.DataFrame(top20_extra)
+
+        st.dataframe(
+            tabel_extra,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        st.download_button(
+            "Descarcă Top 20 CSV",
+            data=tabel_extra.to_csv(
+                index=False
+            ).encode("utf-8-sig"),
+            file_name="football_ai_pro_top20.csv",
+            mime="text/csv",
+            key="descarca_top20_extra"
+            )
+        
+    
