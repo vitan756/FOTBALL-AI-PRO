@@ -1957,6 +1957,129 @@ except Exception as eroare_auto:
         + str(eroare_auto)
             )
     
+# ==========================================
+# FOOTBALL AI PRO - ANALIZA GRESELILOR
+# ==========================================
+
+try:
+    import pandas as pd
+    import streamlit as st
+
+    st.divider()
+    st.header("🧠 ANALIZA GREȘELILOR ROBOTULUI")
+
+    memorie_analiza = st.session_state.get(
+        "fap_memorie_predictii", []
+    )
+
+    verificate_analiza = [
+        p for p in memorie_analiza
+        if isinstance(p, dict)
+        and p.get("Verificată") is True
+    ]
+
+    st.metric(
+        "Meciuri verificate",
+        len(verificate_analiza)
+    )
+
+    if verificate_analiza:
+
+        piete_analiza = [
+            "1X2 corect",
+            "GG corect",
+            "Peste 2.5 corect"
+        ]
+
+        rezultate_piete = []
+
+        for piata in piete_analiza:
+            valori = [
+                p.get(piata)
+                for p in verificate_analiza
+                if isinstance(p.get(piata), bool)
+            ]
+
+            total_piata = len(valori)
+            corecte_piata = sum(valori)
+
+            procent_piata = (
+                corecte_piata / total_piata * 100
+                if total_piata else None
+            )
+
+            rezultate_piete.append({
+                "Piață": piata,
+                "Verificate": total_piata,
+                "Corecte": corecte_piata,
+                "Greșite": total_piata - corecte_piata,
+                "Reușită (%)": (
+                    round(procent_piata, 1)
+                    if procent_piata is not None else "N/A"
+                )
+            })
+
+        tabel_analiza = pd.DataFrame(rezultate_piete)
+
+        st.subheader("📊 Performanța pe piețe")
+        st.dataframe(
+            tabel_analiza,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        disponibile = [
+            x for x in rezultate_piete
+            if isinstance(x["Reușită (%)"], (int, float))
+        ]
+
+        if disponibile:
+            cea_mai_buna = max(
+                disponibile,
+                key=lambda x: x["Reușită (%)"]
+            )
+
+            cea_mai_slaba = min(
+                disponibile,
+                key=lambda x: x["Reușită (%)"]
+            )
+
+            st.success(
+                "Cea mai bună piață: "
+                + cea_mai_buna["Piață"]
+                + " ("
+                + str(cea_mai_buna["Reușită (%)"])
+                + "%)"
+            )
+
+            st.warning(
+                "Piața cu cele mai multe dificultăți: "
+                + cea_mai_slaba["Piață"]
+                + " ("
+                + str(cea_mai_slaba["Reușită (%)"])
+                + "%)"
+            )
+
+        st.info(
+            "Analiza folosește numai predicțiile verificate "
+            "care au rezultate salvate. Nu modifică automat "
+            "probabilitățile motorului."
+        )
+
+    else:
+        st.info(
+            "Robotul nu are încă meciuri verificate. "
+            "După verificarea primelor rezultate, "
+            "analiza va începe automat."
+        )
+
+except Exception as eroare_analiza:
+    st.warning(
+        "Eroare în analiza greșelilor: "
+        + str(eroare_analiza)
+    )
+    
+    
     
     
     
