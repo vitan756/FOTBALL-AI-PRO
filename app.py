@@ -336,7 +336,26 @@ def openliga_istoric(cod, sezon):
     date_meciuri = raspuns.json()
     return date_meciuri if isinstance(date_meciuri, list) else []
 
+def openliga_scor(meci):
+    rezultate = meci.get("matchResults", [])
 
+    finale = [
+        x for x in rezultate
+        if x.get("resultTypeID") == 2
+    ]
+
+    if not finale:
+        return None
+
+    scor = finale[-1]
+
+    gazde = scor.get("pointsTeam1")
+    oaspeti = scor.get("pointsTeam2")
+
+    if gazde is None or oaspeti is None:
+        return None
+
+    return int(gazde), int(oaspeti)
 def openliga_data(meci):
     try:
         text_data = meci.get("matchDateTime", "")
