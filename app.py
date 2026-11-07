@@ -756,7 +756,7 @@ if st.button(
                     "Gazde": echipe,
                     "Oaspeti": adversar,
                     "Scor": str(scor) if scor else "Nedisputat"
-                } 
+                }) 
 
             st.dataframe(
                 pd.DataFrame(tabel_of),
