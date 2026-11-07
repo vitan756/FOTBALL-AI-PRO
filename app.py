@@ -1277,6 +1277,188 @@ except Exception as eroare_memorie:
         "Modulul de memorie: " + str(eroare_memorie)
     )
     
+# ==========================================
+# FOOTBALL AI PRO - MODUL 2
+# VERIFICAREA PRONOSTICURILOR
+# ==========================================
+
+try:
+    import streamlit as st
+    import pandas as pd
+
+    if "fap_rezultate_reale" not in st.session_state:
+        st.session_state["fap_rezultate_reale"] = {}
+
+    st.divider()
+    st.header("📊 VERIFICARE REZULTATE REALE")
+
+    memorie = st.session_state.get(
+        "fap_memorie_predictii", []
+    )
+
+    rezultate = st.session_state["fap_rezultate_reale"]
+
+    if memorie:
+
+        meciuri_neverificate = [
+            m for m in memorie
+            if m.get("ID") not in rezultate
+        ]
+
+        if meciuri_neverificate:
+
+            selectat = st.selectbox(
+                "Alege meciul terminat",
+                meciuri_neverificate,
+                format_func=lambda m: (
+                    str(m.get("Data", "")) + " - "
+                    + str(m.get("Meci", ""))
+                ),
+                key="fap_select_verificare"
+            )
+
+            st.write(
+                "**Predicția robotului:**",
+                selectat.get("Scor estimat", "Nedisponibil")
+            )
+
+            with st.form("fap_form_scor_real"):
+
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    goluri_gazde = st.number_input(
+                        "Goluri gazde",
+                        min_value=0,
+                        max_value=30,
+                        value=0,
+                        step=1
+                    )
+
+                with col2:
+                    goluri_oaspeti = st.number_input(
+                        "Goluri oaspeți",
+                        min_value=0,
+                        max_value=30,
+                        value=0,
+                        step=1
+                    )
+
+                trimite = st.form_submit_button(
+                    "Verifică pronosticul"
+                )
+
+                if trimite:
+
+                    g = int(goluri_gazde)
+                    o = int(goluri_oaspeti)
+
+                    p1 = float(
+                        str(selectat.get("Pronostic 1", "0"))
+                        .replace("%", "").replace(",", ".")
+                    )
+                    px = float(
+                        str(selectat.get("Pronostic X", "0"))
+                        .replace("%", "").replace(",", ".")
+                    )
+                    p2 = float(
+                        str(selectat.get("Pronostic 2", "0"))
+                        .replace("%", "").replace(",", ".")
+                    )
+
+                    rezultat_real = (
+                        "1" if g > o else
+                        "X" if g == o else "2"
+                    )
+
+                    pronostic_1x2 = max(
+                        {"1": p1, "X": px, "2": p2},
+                        key=lambda x: {"1": p1, "X": px, "2": p2}[x]
+                    )
+
+                    gg_real = "DA" if g > 0 and o > 0 else "NU"
+                    gg_robot = (
+                        "DA" if float(
+                            str(selectat.get("GG", "0"))
+                            .replace("%", "").replace(",", ".")
+                        ) >= 50 else "NU"
+                    )
+
+                    over_real = "DA" if g + o >= 3 else "NU"
+                    over_robot = (
+                        "DA" if float(
+                            str(selectat.get("Peste 2.5", "0"))
+                            .replace("%", "").replace(",", ".")
+                        ) >= 50 else "NU"
+                    )
+
+                    rezultate[selectat["ID"]] = {
+                        "Meci": selectat["Meci"],
+                        "Scor real": f"{g}-{o}",
+                        "Pronostic 1X2": pronostic_1x2,
+                        "1X2 corect": pronostic_1x2 == rezultat_real,
+                        "GG corect": gg_robot == gg_real,
+                        "Peste 2.5 corect": over_robot == over_real
+                    }
+
+                    st.session_state[
+                        "fap_rezultate_reale"
+                    ] = rezultate
+
+                    st.success(
+                        "Scorul a fost înregistrat și verificat!"
+                    )
+
+                    st.rerun()
+
+        else:
+            st.info(
+                "Toate predicțiile memorate au fost verificate."
+            )
+
+        if rezultate:
+
+            tabel_verificare = pd.DataFrame(
+                list(rezultate.values())
+            )
+
+            st.subheader("📈 Performanța robotului")
+
+            for piata, coloana in [
+                ("1X2", "1X2 corect"),
+                ("GG", "GG corect"),
+                ("Peste 2.5", "Peste 2.5 corect")
+            ]:
+
+                total = len(tabel_verificare)
+                corecte = int(
+                    tabel_verificare[coloana].sum()
+                )
+                procent = corecte / total * 100
+
+                st.metric(
+                    piata,
+                    f"{procent:.1f}%",
+                    f"{corecte} din {total} corecte"
+                )
+
+            st.dataframe(
+                tabel_verificare,
+                use_container_width=True,
+                hide_index=True
+            )
+
+    else:
+        st.info(
+            "Mai întâi trebuie să existe predicții în memorie."
+        )
+
+except Exception as eroare_verificare:
+    st.warning(
+        "Eroare verificare: " + str(eroare_verificare)
+    )
+    
+    
         
         
         
