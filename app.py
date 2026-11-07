@@ -143,7 +143,7 @@ with st.sidebar:
 
     if not api_key:
         st.info("Introdu cheia API
-        Ninjas în meniul din stânga.")
+    Ninjas în meniul din stânga.")
 
 
 
