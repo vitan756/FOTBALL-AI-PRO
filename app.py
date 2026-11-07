@@ -567,5 +567,94 @@ try:
 except Exception as eroare:
     st.error(
         f"Eroare la motorul de predicții gratuite: {eroare}"
+
+        
+# ==========================================
+# SURSA GRATUITA SUPLIMENTARA OPENFOOTBALL
+# ==========================================
+
+OPENFOOTBALL_LIGI = {
+    "Anglia - Premier League": "eng.1",
+    "Anglia - Championship": "eng.2",
+    "Germania - Bundesliga": "de.1",
+    "Spania - LaLiga": "es.1",
+    "Italia - Serie A": "it.1",
+    "Franta - Ligue 1": "fr.1",
+    "Olanda - Eredivisie": "nl.1",
+    "Portugalia - Primeira Liga": "pt.1",
+}
+
+@st.cache_data(ttl=3600)
+def openfootball_rezultate(cod):
+    url = (
+        "https://raw.githubusercontent.com/"
+        "openfootball/football.json/master/"
+        + cod + "/2026-27"
+        + ".json"
+    )
+
+    raspuns = requests.get(url, timeout=25)
+    raspuns.raise_for_status()
+    continut = raspuns.json()
+
+    return continut.get("matches", [])
+
+
+st.divider()
+st.header("🌍 CAMPIONATE SUPLIMENTARE GRATUITE")
+st.caption(
+    "Sursa OpenFootball. Disponibilitatea meciurilor "
+    "depinde de publicarea datelor."
+)
+
+liga_openfootball = st.selectbox(
+    "Alege campionatul suplimentar",
+    list(OPENFOOTBALL_LIGI.keys()),
+    key="openfootball_liga"
+)
+
+if st.button(
+    "ÎNCARCĂ MECIURILE SUPLIMENTARE",
+    key="openfootball_incarca"
+):
+    try:
+        cod = OPENFOOTBALL_LIGI[liga_openfootball]
+
+        meciuri_of = openfootball_rezultate(cod)
+
+        if not meciuri_of:
+            st.warning(
+                "Nu există date disponibile pentru acest campionat."
+            )
+        else:
+            tabel_of = []
+
+            for m in meciuri_of:
+                echipe = m.get("team1", "")
+                adversar = m.get("team2", "")
+                scor = m.get("score", {})
+
+                tabel_of.append({
+                    "Data": m.get("date", ""),
+                    "Gazde": echipe,
+                    "Oaspeti": adversar,
+                    "Scor": str(scor) if scor else "Nedisputat"
+                })
+
+            st.dataframe(
+                pd.DataFrame(tabel_of),
+                use_container_width=True,
+                hide_index=True
+            )
+
+            st.success(
+                f"Au fost încărcate {len(tabel_of)} înregistrări."
+            )
+
+    except Exception as e:
+        st.error(
+            f"Sursa OpenFootball nu este disponibilă: {e}"
+        )
+        
     )
     
