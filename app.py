@@ -1186,6 +1186,97 @@ else:
     st.info(
         "Modulul Pauza / Final asteapta datele motorului principal."
                 )
+    
+# ==========================================
+# FOOTBALL AI PRO - AUTOINVATARE
+# MODUL 1: MEMORIA PREDICTIILOR
+# ==========================================
+
+try:
+    import pandas as pd
+    import streamlit as st
+    from datetime import datetime
+
+    if "fap_memorie_predictii" not in st.session_state:
+        st.session_state["fap_memorie_predictii"] = []
+
+    if "predictii" in globals() and predictii:
+
+        memorie = st.session_state["fap_memorie_predictii"]
+
+        for meci in predictii:
+            try:
+                data_meci = str(meci.get("Data", ""))
+                nume_meci = str(meci.get("Meci", ""))
+
+                if not nume_meci:
+                    continue
+
+                identificator = data_meci + "|" + nume_meci
+
+                exista = any(
+                    x.get("ID") == identificator
+                    for x in memorie
+                )
+
+                if not exista:
+                    memorie.append({
+                        "ID": identificator,
+                        "Data": data_meci,
+                        "Meci": nume_meci,
+                        "Pronostic 1": meci.get("1", ""),
+                        "Pronostic X": meci.get("X", ""),
+                        "Pronostic 2": meci.get("2", ""),
+                        "GG": meci.get("GG", ""),
+                        "Peste 2.5": meci.get("Peste 2.5", ""),
+                        "Scor estimat": meci.get("Scor estimat", ""),
+                        "Data salvării": datetime.now().strftime(
+                            "%Y-%m-%d %H:%M"
+                        )
+                    })
+
+            except Exception:
+                continue
+
+    st.divider()
+    st.header("🧠 AUTOÎNVĂȚARE - MEMORIA ROBOTULUI")
+
+    memorie = st.session_state["fap_memorie_predictii"]
+
+    st.metric(
+        "Predicții memorate",
+        len(memorie)
+    )
+
+    if memorie:
+        tabel_memorie = pd.DataFrame(memorie)
+
+        st.dataframe(
+            tabel_memorie,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        st.download_button(
+            "Descarcă memoria robotului CSV",
+            data=tabel_memorie.to_csv(
+                index=False
+            ).encode("utf-8-sig"),
+            file_name="football_ai_pro_memorie.csv",
+            mime="text/csv"
+        )
+
+    else:
+        st.info(
+            "Robotul va memora aici predicțiile "
+            "pe măsură ce sunt generate."
+        )
+
+except Exception as eroare_memorie:
+    st.warning(
+        "Modulul de memorie: " + str(eroare_memorie)
+    )
+    
         
         
         
