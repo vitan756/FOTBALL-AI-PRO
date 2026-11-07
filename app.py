@@ -1669,6 +1669,295 @@ except Exception as eroare_recuperare:
         + str(eroare_recuperare)
     )
     
+# ==========================================
+# FOOTBALL AI PRO - VERIFICARE AUTOMATA
+# SCORURI REALE DIN OPENLIGADB + SUPABASE
+# ==========================================
+
+try:
+    import requests
+    import pandas as pd
+    import streamlit as st
+    from datetime import datetime
+
+    st.divider()
+    st.header("🤖 VERIFICARE AUTOMATĂ A PRONOSTICURILOR")
+
+    if st.button(
+        "🔍 VERIFICĂ AUTOMAT SCORURILE FINALE",
+        type="primary",
+        key="fap_verificare_automata"
+    ):
+
+        if "liga_selectata" not in globals():
+            st.error("Selectează mai întâi un campionat.")
+        elif not st.secrets.get("SUPABASE_URL", ""):
+            st.error("Conexiunea Supabase nu este configurată.")
+        else:
+            url_db = st.secrets["SUPABASE_URL"].strip().rstrip("/")
+            key_db = st.secrets["SUPABASE_KEY"].strip()
+
+            headers_db = {
+                "apikey": key_db,
+                "Authorization": "Bearer " + key_db,
+                "Content-Type": "application/json",
+                "Prefer": "return=minimal"
+            }
+
+            memorie_auto = st.session_state.get(
+                "fap_memorie_predictii", []
+            )
+
+            cod_auto = liga_selectata["Cod"]
+            sezon_auto = liga_selectata["Sezon"]
+
+            with st.spinner(
+                "Caut scorurile finale și verific predicțiile..."
+            ):
+                meciuri_auto = openliga_istoric(
+                    cod_auto,
+                    sezon_auto
+                )
+
+                rezultate_auto = []
+                verificate_auto = 0
+
+                for predictie_auto in memorie_auto:
+                    try:
+                        if predictie_auto.get("Verificată"):
+                            continue
+
+                        nume_auto = str(
+                            predictie_auto.get("Meci", "")
+                        )
+
+                        data_auto = str(
+                            predictie_auto.get("Data", "")
+                        )
+
+                        gasit_auto = None
+
+                        for meci_auto in meciuri_auto:
+                            gazde_auto = meci_auto.get(
+                                "team1", {}
+                            ).get("teamName", "")
+
+                            oaspeti_auto = meci_auto.get(
+                                "team2", {}
+                            ).get("teamName", "")
+
+                            nume_real_auto = (
+                                gazde_auto + " - " + oaspeti_auto
+                            )
+
+                            data_real_auto = openliga_data(
+                                meci_auto
+                            )
+
+                            if data_real_auto is None:
+                                continue
+
+                            data_formatata_auto = (
+                                data_real_auto.strftime(
+                                    "%d.%m.%Y %H:%M"
+                                )
+                            )
+
+                            if (
+                                nume_real_auto == nume_auto
+                                and data_formatata_auto == data_auto
+                            ):
+                                scor_auto = openliga_scor(
+                                    meci_auto
+                                )
+
+                                if scor_auto is not None:
+                                    gasit_auto = scor_auto
+                                    break
+
+                        if gasit_auto is None:
+                            continue
+
+                        g_auto, o_auto = gasit_auto
+
+                        p1_auto = float(
+                            str(predictie_auto.get(
+                                "Pronostic 1", "0"
+                            )).replace("%", "").replace(",", ".")
+                        )
+
+                        px_auto = float(
+                            str(predictie_auto.get(
+                                "Pronostic X", "0"
+                            )).replace("%", "").replace(",", ".")
+                        )
+
+                        p2_auto = float(
+                            str(predictie_auto.get(
+                                "Pronostic 2", "0"
+                            )).replace("%", "").replace(",", ".")
+                        )
+
+                        gg_auto = float(
+                            str(predictie_auto.get(
+                                "GG", "0"
+                            )).replace("%", "").replace(",", ".")
+                        )
+
+                        over_auto = float(
+                            str(predictie_auto.get(
+                                "Peste 2.5", "0"
+                            )).replace("%", "").replace(",", ".")
+                        )
+
+                        pronostic_auto = max(
+                            {"1": p1_auto, "X": px_auto, "2": p2_auto},
+                            key=lambda x: {
+                                "1": p1_auto,
+                                "X": px_auto,
+                                "2": p2_auto
+                            }[x]
+                        )
+
+                        real_1x2 = (
+                            "1" if g_auto > o_auto
+                            else "X" if g_auto == o_auto
+                            else "2"
+                        )
+
+                        gg_real_auto = (
+                            "DA" if g_auto > 0 and o_auto > 0
+                            else "NU"
+                        )
+
+                        gg_robot_auto = (
+                            "DA" if gg_auto >= 50 else "NU"
+                        )
+
+                        over_real_auto = (
+                            "DA" if g_auto + o_auto >= 3
+                            else "NU"
+                        )
+
+                        over_robot_auto = (
+                            "DA" if over_auto >= 50 else "NU"
+                        )
+
+                        scor_real_auto = (
+                            str(g_auto) + "-" + str(o_auto)
+                        )
+
+                        predictie_auto["Verificată"] = True
+                        predictie_auto["Scor real"] = scor_real_auto
+                        predictie_auto["1X2 corect"] = (
+                            pronostic_auto == real_1x2
+                        )
+                        predictie_auto["GG corect"] = (
+                            gg_robot_auto == gg_real_auto
+                        )
+                        predictie_auto["Peste 2.5 corect"] = (
+                            over_robot_auto == over_real_auto
+                        )
+
+                        identificator_auto = str(
+                            predictie_auto.get("ID", "")
+                        )
+
+                        if identificator_auto:
+                            raspuns_db = requests.patch(
+                                url_db + "/rest/v1/fap_predictii",
+                                params={
+                                    "id": "eq." + identificator_auto
+                                },
+                                headers=headers_db,
+                                json={
+                                    "verified": True,
+                                    "real_score": scor_real_auto,
+                                    "prediction": predictie_auto
+                                },
+                                timeout=30
+                            )
+
+                            raspuns_db.raise_for_status()
+
+                        rezultate_auto.append({
+                            "Meci": nume_auto,
+                            "Scor real": scor_real_auto,
+                            "1X2 corect": pronostic_auto == real_1x2,
+                            "GG corect": gg_robot_auto == gg_real_auto,
+                            "Peste 2.5 corect": (
+                                over_robot_auto == over_real_auto
+                            )
+                        })
+
+                        verificate_auto += 1
+
+                    except Exception:
+                        continue
+
+                st.session_state[
+                    "fap_memorie_predictii"
+                ] = memorie_auto
+
+                st.session_state[
+                    "fap_rezultate_auto"
+                ] = rezultate_auto
+
+            if verificate_auto:
+                st.success(
+                    str(verificate_auto)
+                    + " meciuri verificate și salvate în Supabase!"
+                )
+            else:
+                st.info(
+                    "Nu am găsit încă meciuri terminate "
+                    "care să corespundă predicțiilor din "
+                    "campionatul selectat."
+                )
+
+    rezultate_afisare = st.session_state.get(
+        "fap_rezultate_auto", []
+    )
+
+    if rezultate_afisare:
+        tabel_auto = pd.DataFrame(rezultate_afisare)
+
+        total_auto = len(tabel_auto)
+
+        st.subheader("📊 REZULTATELE ROBOTULUI")
+
+        for piata_auto in [
+            "1X2 corect",
+            "GG corect",
+            "Peste 2.5 corect"
+        ]:
+            corecte_auto = int(
+                tabel_auto[piata_auto].sum()
+            )
+
+            procent_auto = (
+                corecte_auto / total_auto * 100
+            )
+
+            st.metric(
+                piata_auto,
+                f"{procent_auto:.1f}%",
+                f"{corecte_auto} din {total_auto}"
+            )
+
+        st.dataframe(
+            tabel_auto,
+            use_container_width=True,
+            hide_index=True
+        )
+
+except Exception as eroare_auto:
+    st.error(
+        "Eroare la verificarea automată: "
+        + str(eroare_auto)
+            )
+    
+    
     
     
     
