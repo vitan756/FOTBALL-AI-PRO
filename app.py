@@ -418,10 +418,6 @@ def openliga_forma(meciuri, echipa, pana_la):
         sum(goluri_primite) / len(goluri_primite),
         len(goluri_marcate)
     )
-
-        if data is None or scor is None:
-            continue
-
         if data.tzinfo is None:
             data = data.replace(tzinfo=timezone.utc)
         else:
