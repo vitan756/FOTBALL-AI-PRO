@@ -584,6 +584,7 @@ OPENFOOTBALL_LIGI = {
     "Portugalia - Primeira Liga": "pt.1",
 }
 
+
 @st.cache_data(ttl=3600)
 def openfootball_rezultate(cod):
     url = (
@@ -591,13 +592,16 @@ def openfootball_rezultate(cod):
         "openfootball/football.json/master/"
         + cod + "/2026-27.json"
     )
+
     raspuns = requests.get(url, timeout=25)
     raspuns.raise_for_status()
+
     continut = raspuns.json()
     return continut.get("matches", [])
 
+
 st.divider()
-st.header("🌍 CAMPIONATE SUPLIMENTARE GRATUITE")
+st.header("CAMPIONATE SUPLIMENTARE GRATUITE")
 
 liga_openfootball = st.selectbox(
     "Alege campionatul suplimentar",
@@ -605,7 +609,38 @@ liga_openfootball = st.selectbox(
     key="openfootball_liga"
 )
 
-if st.button("ÎNCARCĂ MECIURILE SUPLIMENTARE"):
+if st.button("INCARCA MECIURILE SUPLIMENTARE"):
+    try:
+        cod = OPENFOOTBALL_LIGI[liga_openfootball]
+        meciuri_of = openfootball_rezultate(cod)
+
+        if not meciuri_of:
+            st.warning("Nu exista date disponibile.")
+        else:
+            tabel_of = []
+
+            for m in meciuri_of:
+                tabel_of.append({
+                    "Data": m.get("date", ""),
+                    "Gazde": m.get("team1", ""),
+                    "Oaspeti": m.get("team2", ""),
+                    "Scor": str(m.get("score", "Nedisputat"))
+                })
+
+            df_of = pd.DataFrame(tabel_of)
+
+            st.dataframe(
+                df_of,
+                use_container_width=True,
+                hide_index=True
+            )
+
+            st.success(
+                f"Au fost incarcate {len(tabel_of)} meciuri."
+            )
+
+    except Exception as e:
+        st.error(f"Eroare OpenFootball: {e}")
     try:
         cod = OPENFOOTBALL_LIGI[liga_openfootball]
         meciuri_of = openfootball_rezultate(cod)
