@@ -144,8 +144,7 @@ with st.sidebar:
     if not api_key: 
         st.info("Introdu cheia APINinjas în meniul din stânga.")
 
-
-
+tab1, tab2, tab3 = st.tabs(["Meciuri", "Analiză manuală", "Test API"])
 with tab1:
     selected_date = st.date_input("Data meciurilor", value=date.today())
     if st.button("Încarcă meciurile", type="primary"):
