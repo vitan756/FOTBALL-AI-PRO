@@ -358,15 +358,21 @@ def openliga_scor(meci):
 
     return int(gazde), int(oaspeti)
 
-
 def openliga_data(meci):
     try:
         text_data = meci.get("matchDateTime", "")
-        return datetime.fromisoformat(
+        rezultat = datetime.fromisoformat(
             text_data.replace("Z", "+00:00")
         )
+
+        if rezultat.tzinfo is None:
+            rezultat = rezultat.replace(tzinfo=timezone.utc)
+
+        return rezultat.astimezone(timezone.utc)
+
     except (ValueError, TypeError):
         return None
+
 
 
 def openliga_forma(meciuri, echipa, pana_la):
