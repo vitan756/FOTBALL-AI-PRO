@@ -320,3 +320,246 @@ try:
         st.warning("Nu există campionate disponibile.")
 except Exception as e:
     st.error(f"Eroare la încărcarea meciurilor: {e}")
+
+
+# ==========================================
+# MOTOR DE PREDICTII GRATUITE - FOOTBALL AI PRO
+# ==========================================
+
+from datetime import datetime, timezone
+
+@st.cache_data(ttl=1800)
+def openliga_istoric(cod, sezon):
+    url = f"https://api.openligadb.de/getmatchdata/{cod}/{sezon}"
+    raspuns = requests.get(url, timeout=25)
+    raspuns.raise_for_status()
+    date_meciuri = raspuns.json()
+    return date_meciuri if isinstance(date_meciuri, list) else []
+
+
+def openliga_scor(meci):
+    rezultate = meci.get("matchResults", [])
+
+    finale = [
+        x for x in rezultate
+        if x.get("resultTypeID") == 2
+    ]
+
+    if not finale:
+        return None
+
+    scor = finale[-1]
+
+    gazde = scor.get("pointsTeam1")
+    oaspeti = scor.get("pointsTeam2")
+
+    if gazde is None or oaspeti is None:
+        return None
+
+    return int(gazde), int(oaspeti)
+
+
+def openliga_data(meci):
+    try:
+        text_data = meci.get("matchDateTime", "")
+        return datetime.fromisoformat(
+            text_data.replace("Z", "+00:00")
+        )
+    except (ValueError, TypeError):
+        return None
+
+
+def openliga_forma(meciuri, echipa, pana_la):
+    goluri_marcate = []
+    goluri_primite = []
+
+    meciuri_echipa = []
+
+    for meci in meciuri:
+        data = openliga_data(meci)
+        scor = openliga_scor(meci)
+
+        if data is None or scor is None:
+            continue
+
+        if data >= pana_la:
+            continue
+
+        gazde = meci.get("team1", {}).get("teamName", "")
+        oaspeti = meci.get("team2", {}).get("teamName", "")
+
+        if gazde == echipa:
+            meciuri_echipa.append((data, scor[0], scor[1]))
+
+        elif oaspeti == echipa:
+            meciuri_echipa.append((data, scor[1], scor[0]))
+
+    meciuri_echipa.sort(key=lambda x: x[0], reverse=True)
+
+    for _, marcate, primite in meciuri_echipa[:8]:
+        goluri_marcate.append(marcate)
+        goluri_primite.append(primite)
+
+    if len(goluri_marcate) < 3:
+        return None
+
+    return (
+        sum(goluri_marcate) / len(goluri_marcate),
+        sum(goluri_primite) / len(goluri_primite),
+        len(goluri_marcate)
+    )
+
+
+st.divider()
+st.header("🔮 PREDICȚII GRATUITE")
+
+st.caption(
+    "Model Poisson calculat din ultimele 8 meciuri disponibile "
+    "pentru fiecare echipă. Sunt afișate doar meciurile viitoare "
+    "pentru care există suficient istoric."
+)
+
+try:
+    ligi_pred = meciuri_gratuite(sezon_gratuit)
+
+    if not ligi_pred.empty:
+
+        liga_selectata = st.selectbox(
+            "Campionat pentru predicții",
+            ligi_pred.to_dict("records"),
+            format_func=lambda x: x["Campionat"],
+            key="campionat_motor_predictii"
+        )
+
+        if st.button(
+            "CALCULEAZĂ PREDICȚII",
+            type="primary",
+            key="buton_motor_predictii"
+        ):
+
+            with st.spinner("Analizez meciurile și forma echipelor..."):
+
+                toate_meciurile = openliga_istoric(
+                    liga_selectata["Cod"],
+                    liga_selectata["Sezon"]
+                )
+
+                acum = datetime.now(timezone.utc)
+
+                viitoare = []
+
+                for meci in toate_meciurile:
+                    data = openliga_data(meci)
+
+                    if data is None:
+                        continue
+
+                    if data > acum and openliga_scor(meci) is None:
+                        if (
+                            meci.get("team1", {}).get("teamName")
+                            and meci.get("team2", {}).get("teamName")
+                        ):
+                            viitoare.append(meci)
+
+                viitoare.sort(
+                    key=lambda x: x.get("matchDateTime", "")
+                )
+
+                predictii = []
+
+                for meci in viitoare:
+
+                    data_meci = openliga_data(meci)
+
+                    gazde = meci["team1"]["teamName"]
+                    oaspeti = meci["team2"]["teamName"]
+
+                    forma_gazde = openliga_forma(
+                        toate_meciurile,
+                        gazde,
+                        data_meci
+                    )
+
+                    forma_oaspeti = openliga_forma(
+                        toate_meciurile,
+                        oaspeti,
+                        data_meci
+                    )
+
+                    if not forma_gazde or not forma_oaspeti:
+                        continue
+
+                    goluri_gazde = (
+                        forma_gazde[0] + forma_oaspeti[1]
+                    ) / 2
+
+                    goluri_oaspeti = (
+                        forma_oaspeti[0] + forma_gazde[1]
+                    ) / 2
+
+                    lambda_gazde = max(
+                        0.15,
+                        min(4.0, goluri_gazde)
+                    )
+
+                    lambda_oaspeti = max(
+                        0.15,
+                        min(4.0, goluri_oaspeti)
+                    )
+
+                    probabilitati = match_probabilities(
+                        lambda_gazde,
+                        lambda_oaspeti
+                    )
+
+                    scor_probabil = probabilitati["scores"][0]
+
+                    predictii.append({
+                        "Data": data_meci.strftime("%d.%m.%Y %H:%M"),
+                        "Meci": f"{gazde} - {oaspeti}",
+                        "1": f'{probabilitati["1"] * 100:.1f}%',
+                        "X": f'{probabilitati["X"] * 100:.1f}%',
+                        "2": f'{probabilitati["2"] * 100:.1f}%',
+                        "GG": f'{probabilitati["GG"] * 100:.1f}%',
+                        "Peste 2.5": f'{probabilitati["Over 2.5"] * 100:.1f}%',
+                        "Scor estimat": (
+                            f"{scor_probabil[1]}-{scor_probabil[2]}"
+                        ),
+                        "Meciuri analizate": (
+                            f"{forma_gazde[2]} / {forma_oaspeti[2]}"
+                        )
+                    })
+
+            if predictii:
+                st.success(
+                    f"Au fost calculate {len(predictii)} predicții."
+                )
+
+                tabel_predictii = pd.DataFrame(predictii)
+
+                st.dataframe(
+                    tabel_predictii,
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+                st.download_button(
+                    "Descarcă predicțiile CSV",
+                    data=tabel_predictii.to_csv(
+                        index=False
+                    ).encode("utf-8-sig"),
+                    file_name="football_ai_pro_predictii.csv",
+                    mime="text/csv"
+                )
+
+            else:
+                st.warning(
+                    "Nu există meciuri viitoare cu suficient istoric "
+                    "pentru predicții în acest campionat."
+                )
+
+except Exception as eroare:
+    st.error(
+        f"Eroare la motorul de predicții gratuite: {eroare}"
+    )
+    
