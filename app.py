@@ -505,7 +505,7 @@ st.caption(
     "pentru care există suficient istoric."
 )
 
-try:
+try:except
     ligi_pred = meciuri_gratuite(sezon_gratuit)
 
     if not ligi_pred.empty:
