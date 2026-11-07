@@ -7,7 +7,7 @@ import streamlit as st
 st.set_page_config(page_title="FOOTBALL AI PRO", page_icon="⚽", layout="wide")
 
 BASE_URL = "https://v3.football.api-sports.io"
-
+@st.cache_data(ttl=86400, show_spinner=False)
 def api_get(endpoint, api_key, params=None):
     headers = {"x-apisports-key": api_key}
     try:
