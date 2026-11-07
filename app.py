@@ -1458,6 +1458,109 @@ except Exception as eroare_verificare:
         "Eroare verificare: " + str(eroare_verificare)
     )
     
+# ==========================================
+# FOOTBALL AI PRO - SUPABASE
+# MEMORIE PERMANENTA
+# ==========================================
+
+try:
+    import requests
+    import streamlit as st
+
+    supabase_url = st.secrets.get(
+        "SUPABASE_URL", ""
+    ).strip().rstrip("/")
+
+    supabase_key = st.secrets.get(
+        "SUPABASE_KEY", ""
+    ).strip()
+
+    if supabase_url and supabase_key:
+
+        memorie_supabase = st.session_state.get(
+            "fap_memorie_predictii", []
+        )
+
+        antete_supabase = {
+            "apikey": supabase_key,
+            "Authorization": "Bearer " + supabase_key,
+            "Content-Type": "application/json",
+            "Prefer": "resolution=ignore-duplicates,return=minimal"
+        }
+
+        adresa_tabel = (
+            supabase_url + "/rest/v1/fap_predictii"
+        )
+
+        randuri_supabase = []
+
+        for predictie in memorie_supabase:
+            identificator = predictie.get("ID")
+
+            if identificator:
+                randuri_supabase.append({
+                    "id": str(identificator),
+                    "prediction": predictie
+                })
+
+        salvate_supabase = 0
+
+        for pozitie in range(
+            0, len(randuri_supabase), 100
+        ):
+            lot = randuri_supabase[
+                pozitie:pozitie + 100
+            ]
+
+            raspuns = requests.post(
+                adresa_tabel,
+                params={"on_conflict": "id"},
+                headers=antete_supabase,
+                json=lot,
+                timeout=30
+            )
+
+            raspuns.raise_for_status()
+            salvate_supabase += len(lot)
+
+        verificare_supabase = requests.get(
+            adresa_tabel,
+            params={"select": "id"},
+            headers=antete_supabase,
+            timeout=30
+        )
+
+        verificare_supabase.raise_for_status()
+
+        total_supabase = len(
+            verificare_supabase.json()
+        )
+
+        st.divider()
+        st.header("☁️ MEMORIE PERMANENTĂ SUPABASE")
+
+        st.metric(
+            "Predicții găsite în baza de date",
+            total_supabase
+        )
+
+        st.success(
+            "Conexiunea Supabase funcționează! "
+            "Predicțiile memorate au fost sincronizate."
+        )
+
+    else:
+        st.warning(
+            "Completează SUPABASE_URL și SUPABASE_KEY "
+            "în Streamlit Secrets."
+        )
+
+except Exception as eroare_supabase:
+    st.error(
+        "Eroare Supabase: " + str(eroare_supabase)
+    )
+    
+    
     
         
         
