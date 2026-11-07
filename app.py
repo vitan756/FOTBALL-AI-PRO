@@ -142,10 +142,11 @@ with st.sidebar:
     st.write("Plan Free: aplicația folosește intervale de date, nu parametrul `last`.")
 
 if not api_key:
-    st.info("Introdu cheia API-Football în meniul din stânga pentru a încărca meciurile.")
+    if not ninjas_key:
+    st.info("Introdu cheia API Ninjas în meniul din stânga.")
     st.stop()
 
-tab1, tab2, tab3 = st.tabs(["Meciuri și analiză", "Analiză manuală", "Verificare API"])
+
 
 with tab1:
     selected_date = st.date_input("Data meciurilor", value=date.today())
