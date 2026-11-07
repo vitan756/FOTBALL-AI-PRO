@@ -1,26 +1,16 @@
-# FOOTBALL AI PRO v2
+# FOOTBALL AI PRO
 
-Aplicație Streamlit pentru analiză fotbalistică folosind API-FOOTBALL v3.
+Aplicație Streamlit pentru analiză fotbalistică orientativă folosind API-FOOTBALL v3.
 
-## Instalare locală
-```bash
-pip install -r requirements.txt
-streamlit run app.py
-```
-
-## Publicare în Streamlit Community Cloud
-- Repository: contul GitHub / FOOTBALL-AI-PRO
-- Branch: main
-- Main file path: app.py
+## Publicare
+- Repository: `Vitan756/FOOTBALL-AI-PRO`
+- Branch: `main`
+- Main file path: `app.py`
 
 ## Utilizare
-1. Introdu cheia API-FOOTBALL în câmpul secret din bara laterală.
-2. Alege data și apasă „Încarcă meciurile”.
+1. Introdu cheia API-FOOTBALL în bara laterală.
+2. Alege data și încarcă meciurile.
 3. Selectează un meci și apasă „Analizează meciul selectat”.
-4. Pentru test istoric, folosește ID-ul competiției și sezonul în tabul „Validare istorică”.
+4. Tabul „Validare istorică” verifică accesul la datele istorice pentru competiția și sezonul selectate.
 
-## Notă privind datele și limitele
-- Accesul la endpoint-uri depinde de abonamentul API și de acoperirea competiției/sezonului.
-- Modelul Poisson este o estimare statistică simplificată, nu o garanție.
-- xG și cornere nu sunt fabricate; nu sunt incluse în modelul propriu în această versiune.
-- Cheia API nu se introduce în fișiere și nu se comite în GitHub.
+Cheia API nu este salvată în fișiere și nu trebuie publicată în GitHub. Modelul Poisson este o estimare simplificată, nu o garanție de rezultat. Accesul la date depinde de planul API.
