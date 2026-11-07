@@ -1560,6 +1560,116 @@ except Exception as eroare_supabase:
         "Eroare Supabase: " + str(eroare_supabase)
     )
     
+# ==========================================
+# RECUPERARE AUTOMATA DIN SUPABASE
+# ==========================================
+
+try:
+    import requests
+    import streamlit as st
+
+    url_recuperare = st.secrets.get("SUPABASE_URL", "").strip().rstrip("/")
+    cheie_recuperare = st.secrets.get("SUPABASE_KEY", "").strip()
+
+    if url_recuperare and cheie_recuperare:
+
+        antete_recuperare = {
+            "apikey": cheie_recuperare,
+            "Authorization": "Bearer " + cheie_recuperare,
+            "Content-Type": "application/json"
+        }
+
+        if "fap_memorie_predictii" not in st.session_state:
+            st.session_state["fap_memorie_predictii"] = []
+
+        memorie_locala = st.session_state["fap_memorie_predictii"]
+
+        iduri_existente = {
+            str(x.get("ID", ""))
+            for x in memorie_locala
+            if isinstance(x, dict)
+        }
+
+        toate_randurile = []
+        limita_recuperare = 1000
+        offset_recuperare = 0
+
+        while True:
+            raspuns_recuperare = requests.get(
+                url_recuperare + "/rest/v1/fap_predictii",
+                params={
+                    "select": "id,prediction,verified,real_score",
+                    "order": "date_saved.asc",
+                    "limit": limita_recuperare,
+                    "offset": offset_recuperare
+                },
+                headers=antete_recuperare,
+                timeout=30
+            )
+
+            raspuns_recuperare.raise_for_status()
+            lot_recuperare = raspuns_recuperare.json()
+
+            toate_randurile.extend(lot_recuperare)
+
+            if len(lot_recuperare) < limita_recuperare:
+                break
+
+            offset_recuperare += limita_recuperare
+
+        recuperate = 0
+
+        for rand in toate_randurile:
+            predictie_salvata = rand.get("prediction")
+
+            if not isinstance(predictie_salvata, dict):
+                continue
+
+            identificator = str(rand.get("id", ""))
+
+            if not identificator:
+                continue
+
+            predictie_salvata["ID"] = identificator
+
+            if rand.get("verified"):
+                predictie_salvata["Verificată"] = True
+                predictie_salvata["Scor real"] = rand.get("real_score") or ""
+
+            if identificator not in iduri_existente:
+                memorie_locala.append(predictie_salvata)
+                iduri_existente.add(identificator)
+                recuperate += 1
+
+        st.divider()
+        st.header("♻️ RECUPERARE ISTORIC ROBOT")
+
+        st.metric(
+            "Predicții recuperate acum",
+            recuperate
+        )
+
+        st.metric(
+            "Total predicții în memoria robotului",
+            len(memorie_locala)
+        )
+
+        st.success(
+            "Istoricul din Supabase a fost încărcat în robot."
+        )
+
+    else:
+        st.warning(
+            "Lipsesc SUPABASE_URL sau SUPABASE_KEY din Streamlit Secrets."
+        )
+
+except Exception as eroare_recuperare:
+    st.error(
+        "Eroare la recuperarea istoricului: "
+        + str(eroare_recuperare)
+    )
+    
+    
     
     
         
