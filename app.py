@@ -56,13 +56,31 @@ def incarca_campionate(sezon):
 
 
 @st.cache_data(ttl=900, show_spinner=False)
+
+@st.cache_data(ttl=300, show_spinner=False)
 def incarca_meciuri(cod, sezon):
-    url = f"{OPENLIGA}/getmatchdata/{cod}/{sezon}"
-    r = requests.get(url, timeout=30)
-    r.raise_for_status()
+    url = f"https://api.openligadb.de/getmatchdata/{cod}/{sezon}"
+
+    r = requests.get(
+        url,
+        headers={"accept": "application/json"},
+        timeout=30
+    )
+
+    if r.status_code != 200:
+        raise RuntimeError(
+            f"OpenLigaDB HTTP {r.status_code}: {r.text[:300]}"
+        )
+
     data = r.json()
 
-    return data if isinstance(data, list) else []
+    if not isinstance(data, list):
+        raise RuntimeError(
+            f"Raspuns neasteptat de la sursa: {data}"
+        )
+
+    return data
+
 
 
 # ==========================================
