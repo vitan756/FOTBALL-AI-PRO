@@ -337,15 +337,19 @@ def openliga_istoric(cod, sezon):
     return date_meciuri if isinstance(date_meciuri, list) else []
 
 
-def openliga_scor(meci):
-    rezultate = meci.get("matchResults", [])
+def openliga_data(meci):
+    try:
+        text_data = meci.get("matchDateTime", "")
+        rezultat = datetime.fromisoformat(
+            text_data.replace("Z", "+00:00")
+        )
 
-    finale = [
-        x for x in rezultate
-        if x.get("resultTypeID") == 2
-    ]
+        if rezultat.tzinfo is None:
+            rezultat = rezultat.replace(tzinfo=timezone.utc)
 
-    if not finale:
+        return rezultat.astimezone(timezone.utc)
+
+    except (ValueError, TypeError):
         return None
 
     scor = finale[-1]
