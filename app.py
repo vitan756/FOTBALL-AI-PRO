@@ -371,9 +371,6 @@ def openliga_data(meci):
         )
     except (ValueError, TypeError):
         return None
-
-
-
 def openliga_forma(meciuri, echipa, pana_la):
     if pana_la.tzinfo is None:
         pana_la = pana_la.replace(tzinfo=timezone.utc)
@@ -387,6 +384,40 @@ def openliga_forma(meciuri, echipa, pana_la):
     for meci in meciuri:
         data = openliga_data(meci)
         scor = openliga_scor(meci)
+
+        if data is None or scor is None:
+            continue
+
+        if data.tzinfo is None:
+            data = data.replace(tzinfo=timezone.utc)
+        else:
+            data = data.astimezone(timezone.utc)
+
+        if data >= pana_la:
+            continue
+
+        gazde = meci.get("team1", {}).get("teamName", "")
+        oaspeti = meci.get("team2", {}).get("teamName", "")
+
+        if gazde == echipa:
+            meciuri_echipa.append((data, scor[0], scor[1]))
+        elif oaspeti == echipa:
+            meciuri_echipa.append((data, scor[1], scor[0]))
+
+    meciuri_echipa.sort(key=lambda x: x[0], reverse=True)
+
+    for _, marcate, primite in meciuri_echipa[:8]:
+        goluri_marcate.append(marcate)
+        goluri_primite.append(primite)
+
+    if len(goluri_marcate) < 3:
+        return None
+
+    return (
+        sum(goluri_marcate) / len(goluri_marcate),
+        sum(goluri_primite) / len(goluri_primite),
+        len(goluri_marcate)
+    )
 
         if data is None or scor is None:
             continue
