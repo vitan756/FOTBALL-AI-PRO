@@ -1,271 +1,227 @@
 import math
 from datetime import date, timedelta
-
-import pandas as pd
 import requests
+import pandas as pd
 import streamlit as st
-
-API_BASE = "https://v3.football.api-sports.io"
-FINISHED = {"FT", "AET", "PEN"}
 
 st.set_page_config(page_title="FOOTBALL AI PRO", page_icon="⚽", layout="wide")
 
-st.title("⚽ FOOTBALL AI PRO")
-st.caption("Analiză statistică orientativă pe baza meciurilor disponibile în API-FOOTBALL.")
+BASE_URL = "https://v3.football.api-sports.io"
 
-with st.sidebar:
-    st.header("Conectare API")
-    api_key = st.text_input(
-        "API-FOOTBALL API Key",
-        type="password",
-        help="Cheia este folosită doar în sesiunea curentă. Nu o publica în GitHub."
-    ).strip()
-    st.caption("Cheia nu este salvată în fișierul aplicației.")
-
-def api_get(endpoint, params, key):
-    """Call API-Football and return parsed JSON with actionable diagnostics."""
-    if not key:
-        raise RuntimeError("Lipsește cheia API. Introdu cheia în bara laterală.")
-    url = f"{API_BASE}/{endpoint.lstrip('/')}"
+def api_get(endpoint, api_key, params=None):
+    headers = {"x-apisports-key": api_key}
     try:
         response = requests.get(
-            url,
-            headers={"x-apisports-key": key},
-            params=params,
-            timeout=25,
+            f"{BASE_URL}/{endpoint}",
+            headers=headers,
+            params=params or {},
+            timeout=30,
         )
-    except requests.Timeout:
-        raise RuntimeError("API-FOOTBALL nu a răspuns în 25 secunde. Încearcă din nou.")
     except requests.RequestException as exc:
-        raise RuntimeError(f"Eroare de conexiune: {exc}")
+        raise RuntimeError(f"Nu s-a putut contacta API-FOOTBALL: {exc}") from exc
 
     try:
         payload = response.json()
     except ValueError:
-        excerpt = (response.text or "")[:300]
-        raise RuntimeError(
-            f"API a returnat un răspuns care nu este JSON (HTTP {response.status_code}): {excerpt}"
-        )
+        raise RuntimeError(f"API-FOOTBALL a trimis un răspuns invalid (HTTP {response.status_code}).")
 
     if response.status_code != 200:
-        errors = payload.get("errors", payload) if isinstance(payload, dict) else payload
-        raise RuntimeError(f"API-FOOTBALL HTTP {response.status_code}: {errors}")
+        raise RuntimeError(f"API-FOOTBALL HTTP {response.status_code}: {payload}")
 
-    errors = payload.get("errors") if isinstance(payload, dict) else None
+    errors = payload.get("errors")
     if errors:
         raise RuntimeError(f"API-FOOTBALL a raportat: {errors}")
 
-    if not isinstance(payload, dict) or "response" not in payload:
-        raise RuntimeError("Răspuns API neașteptat: lipsește câmpul 'response'.")
+    return payload.get("response", []), payload.get("results", 0)
 
-    return payload
+def poisson(lam, goals):
+    return math.exp(-lam) * (lam ** goals) / math.factorial(goals)
 
-def poisson_pmf(k, lam):
-    lam = max(0.05, float(lam))
-    return math.exp(-lam) * (lam ** k) / math.factorial(k)
-
-def poisson_markets(home_lam, away_lam, max_goals=10):
-    scores = []
+def match_probabilities(home_lambda, away_lambda, max_goals=8):
     p_home = p_draw = p_away = 0.0
-    p_btts = 0.0
     totals = {1.5: 0.0, 2.5: 0.0, 3.5: 0.0}
+    gg = 0.0
+    scores = []
     for h in range(max_goals + 1):
-        ph = poisson_pmf(h, home_lam)
+        ph = poisson(home_lambda, h)
         for a in range(max_goals + 1):
-            p = ph * poisson_pmf(a, away_lam)
-            scores.append((h, a, p))
+            p = ph * poisson(away_lambda, a)
             if h > a:
                 p_home += p
             elif h == a:
                 p_draw += p
             else:
                 p_away += p
+            if h + a > 1:
+                totals[1.5] += p
+            if h + a > 2:
+                totals[2.5] += p
+            if h + a > 3:
+                totals[3.5] += p
             if h > 0 and a > 0:
-                p_btts += p
-            for line in totals:
-                if h + a > line:
-                    totals[line] += p
-    norm = p_home + p_draw + p_away
-    if norm:
-        p_home, p_draw, p_away = p_home/norm, p_draw/norm, p_away/norm
+                gg += p
+            scores.append((p, h, a))
+    total = p_home + p_draw + p_away
+    if total:
+        p_home, p_draw, p_away = p_home/total, p_draw/total, p_away/total
     return {
         "1": p_home, "X": p_draw, "2": p_away,
-        "GG": p_btts, "NG": 1-p_btts,
-        "over": totals,
-        "scores": sorted(scores, key=lambda x: x[2], reverse=True)[:5],
+        "GG": gg, "NG": 1-gg,
+        "Over 1.5": totals[1.5], "Over 2.5": totals[2.5], "Over 3.5": totals[3.5],
+        "Under 1.5": 1-totals[1.5], "Under 2.5": 1-totals[2.5], "Under 3.5": 1-totals[3.5],
+        "scores": sorted(scores, reverse=True)[:5],
     }
 
-def finished_fixture_rows(payload):
-    rows = payload.get("response", [])
-    return [
-        x for x in rows
-        if x.get("fixture", {}).get("status", {}).get("short") in FINISHED
-        and x.get("goals", {}).get("home") is not None
-        and x.get("goals", {}).get("away") is not None
-    ]
-
-def team_recent(team_id, key):
-    payload = api_get("fixtures", {"team": team_id, "last": 10}, key)
-    rows = finished_fixture_rows(payload)
-    if not rows:
-        raise RuntimeError(
-            f"API nu a returnat meciuri încheiate pentru echipa cu ID {team_id}. "
-            "Verifică accesul planului API la competiție și sezon."
-        )
-    scored, conceded = [], []
-    home_scored, home_conceded, away_scored, away_conceded = [], [], [], []
+def completed_fixtures(rows):
+    done = []
     for item in rows:
-        fixture = item["fixture"]
-        teams = item["teams"]
-        goals = item["goals"]
-        is_home = teams["home"]["id"] == team_id
-        gf = goals["home"] if is_home else goals["away"]
-        ga = goals["away"] if is_home else goals["home"]
-        scored.append(float(gf))
-        conceded.append(float(ga))
-        if is_home:
-            home_scored.append(float(gf)); home_conceded.append(float(ga))
-        else:
-            away_scored.append(float(gf)); away_conceded.append(float(ga))
+        fixture = item.get("fixture", {})
+        status = fixture.get("status", {}).get("short", "")
+        goals = item.get("goals", {})
+        if status in ("FT", "AET", "PEN") and goals.get("home") is not None and goals.get("away") is not None:
+            done.append(item)
+    return sorted(done, key=lambda x: x.get("fixture", {}).get("timestamp", 0), reverse=True)
 
-    def avg(values, fallback):
-        return sum(values)/len(values) if values else fallback
+def team_recent(team_id, api_key, today):
+    # Compatibil cu planul gratuit: folosim intervalul from/to.
+    # NU folosim parametrul last, care nu este disponibil pe Free.
+    start = today - timedelta(days=365)
+    rows, _ = api_get(
+        "fixtures",
+        api_key,
+        {
+            "team": team_id,
+            "from": start.isoformat(),
+            "to": today.isoformat(),
+            "timezone": "Europe/Bucharest",
+        },
+    )
+    return completed_fixtures(rows)[:10]
 
-    return {
-        "n": len(rows),
-        "gf": avg(scored, 1.2),
-        "ga": avg(conceded, 1.2),
-        "home_gf": avg(home_scored, avg(scored, 1.2)),
-        "home_ga": avg(home_conceded, avg(conceded, 1.2)),
-        "away_gf": avg(away_scored, avg(scored, 1.2)),
-        "away_ga": avg(away_conceded, avg(conceded, 1.2)),
-    }
+def team_rates(fixtures, team_id, home_venue):
+    scored, conceded = [], []
+    for item in fixtures:
+        teams = item.get("teams", {})
+        goals = item.get("goals", {})
+        is_home = teams.get("home", {}).get("id") == team_id
+        own = goals.get("home") if is_home else goals.get("away")
+        opp = goals.get("away") if is_home else goals.get("home")
+        if own is not None and opp is not None:
+            scored.append(float(own))
+            conceded.append(float(opp))
+    if not scored:
+        return None
+    return sum(scored)/len(scored), sum(conceded)/len(conceded)
 
-def percent(x):
-    return f"{100*x:.1f}%"
+def expected_goals(home_rows, away_rows, home_id, away_id):
+    h_all = team_rates(home_rows, home_id, True)
+    a_all = team_rates(away_rows, away_id, False)
+    if not h_all or not a_all:
+        raise RuntimeError("Nu există suficiente meciuri terminate în ultimele 365 de zile pentru ambele echipe.")
+    # Estimare simplificată din golurile marcate și primite recent.
+    h_attack = (h_all[0] + a_all[1]) / 2
+    a_attack = (a_all[0] + h_all[1]) / 2
+    return max(0.15, min(4.0, h_attack)), max(0.15, min(4.0, a_attack))
 
-tab_auto, tab_manual, tab_history = st.tabs(
-    ["Analiză API", "Analiză manuală", "Validare istorică"]
-)
+st.title("⚽ FOOTBALL AI PRO")
+st.caption("Analiză statistică orientativă pe baza meciurilor recente. Nu garantează rezultate și nu reprezintă recomandare de pariere.")
 
-with tab_auto:
-    st.subheader("Meciuri din API-FOOTBALL")
-    chosen_date = st.date_input("Data meciurilor", value=date.today())
+with st.sidebar:
+    st.header("Conectare API")
+    api_key = st.text_input("API-Football Key", type="password", help="Cheia rămâne doar în sesiunea curentă.")
+    st.caption("Nu trimite cheia nimănui și nu o publica pe GitHub.")
+    st.divider()
+    st.write("Plan Free: aplicația folosește intervale de date, nu parametrul `last`.")
+
+if not api_key:
+    st.info("Introdu cheia API-Football în meniul din stânga pentru a încărca meciurile.")
+    st.stop()
+
+tab1, tab2, tab3 = st.tabs(["Meciuri și analiză", "Analiză manuală", "Verificare API"])
+
+with tab1:
+    selected_date = st.date_input("Data meciurilor", value=date.today())
     if st.button("Încarcă meciurile", type="primary"):
         try:
-            data = api_get("fixtures", {"date": chosen_date.isoformat(), "timezone": "Europe/Bucharest"}, api_key)
-            fixtures = data["response"]
-            st.session_state["fixtures"] = fixtures
-            st.session_state["fixtures_date"] = chosen_date.isoformat()
-            st.success(f"Au fost găsite {len(fixtures)} meciuri.")
+            rows, _ = api_get("fixtures", api_key, {
+                "date": selected_date.isoformat(),
+                "timezone": "Europe/Bucharest",
+            })
+            st.session_state["fixtures_for_date"] = rows
+            st.session_state["fixtures_date"] = selected_date.isoformat()
         except Exception as exc:
-            st.error(f"Nu am putut încărca meciurile: {exc}")
+            st.error(str(exc))
 
-    fixtures = st.session_state.get("fixtures", [])
-    if fixtures:
+    rows = st.session_state.get("fixtures_for_date", [])
+    if st.session_state.get("fixtures_date") == selected_date.isoformat() and rows:
         options = []
-        for f in fixtures:
-            h = f.get("teams", {}).get("home", {}).get("name", "Gazde")
-            a = f.get("teams", {}).get("away", {}).get("name", "Oaspeți")
-            league = f.get("league", {}).get("name", "Competiție")
-            kickoff = f.get("fixture", {}).get("date", "")
-            fid = f.get("fixture", {}).get("id")
-            options.append((f"{h} – {a} | {league} | {kickoff[:16]}", fid))
-        labels = [x[0] for x in options]
-        selected_label = st.selectbox("Selectează meciul", labels)
-        selected_id = dict(options)[selected_label]
-        selected = next((f for f in fixtures if f.get("fixture", {}).get("id") == selected_id), None)
-
+        lookup = {}
+        for item in rows:
+            fixture = item.get("fixture", {})
+            teams = item.get("teams", {})
+            home = teams.get("home", {})
+            away = teams.get("away", {})
+            label = f'{home.get("name", "Gazde")} - {away.get("name", "Oaspeți")} | {fixture.get("date", "")[:16]}'
+            options.append(label)
+            lookup[label] = item
+        chosen = st.selectbox("Alege meciul", options)
+        match = lookup[chosen]
+        home = match["teams"]["home"]
+        away = match["teams"]["away"]
+        st.subheader(f'{home.get("name")} - {away.get("name")}')
         if st.button("Analizează meciul selectat", type="primary"):
             try:
-                if not selected:
-                    raise RuntimeError("Meciul selectat nu mai este disponibil în listă.")
-                home = selected["teams"]["home"]
-                away = selected["teams"]["away"]
-                home_id, away_id = home["id"], away["id"]
-                with st.spinner("Preiau ultimele 10 meciuri ale ambelor echipe..."):
-                    hstats = team_recent(home_id, api_key)
-                    astats = team_recent(away_id, api_key)
-
-                # Venue-aware blend: overall form + venue-specific form.
-                home_attack = 0.65*hstats["home_gf"] + 0.35*hstats["gf"]
-                away_defence = 0.65*astats["away_ga"] + 0.35*astats["ga"]
-                away_attack = 0.65*astats["away_gf"] + 0.35*astats["gf"]
-                home_defence = 0.65*hstats["home_ga"] + 0.35*hstats["ga"]
-                league_home_baseline, league_away_baseline = 1.45, 1.15
-                home_lam = max(0.15, (home_attack * away_defence / 1.25 + league_home_baseline) / 2)
-                away_lam = max(0.15, (away_attack * home_defence / 1.25 + league_away_baseline) / 2)
-                probs = poisson_markets(home_lam, away_lam)
-
-                st.success("Analiza a fost calculată.")
-                st.caption(
-                    f"Bază de date: ultimele {hstats['n']} meciuri pentru {home['name']} "
-                    f"și ultimele {astats['n']} pentru {away['name']}."
-                )
+                with st.spinner("Analizez ultimele meciuri disponibile..."):
+                    home_recent = team_recent(home["id"], api_key, selected_date)
+                    away_recent = team_recent(away["id"], api_key, selected_date)
+                    hl, al = expected_goals(home_recent, away_recent, home["id"], away["id"])
+                    probs = match_probabilities(hl, al)
                 c1, c2, c3 = st.columns(3)
-                c1.metric("1 – Gazde", percent(probs["1"]))
-                c2.metric("X – Egal", percent(probs["X"]))
-                c3.metric("2 – Oaspeți", percent(probs["2"]))
-                c4, c5 = st.columns(2)
-                c4.metric("GG", percent(probs["GG"]))
-                c5.metric("NG", percent(probs["NG"]))
-                st.markdown("**Over / Under**")
-                for line, p_over in probs["over"].items():
-                    st.write(f"Over {line}: **{percent(p_over)}**  |  Under {line}: **{percent(1-p_over)}**")
-                st.markdown("**Scoruri exacte cele mai probabile**")
-                for h, a, p in probs["scores"]:
-                    st.write(f"{h}–{a}: {percent(p)}")
-                st.info(
-                    f"Goluri estimate: {home['name']} {home_lam:.2f} – "
-                    f"{away_lam:.2f} {away['name']}."
-                )
-                st.warning(
-                    "Estimare Poisson simplificată pe rezultate recente. Nu include xG, "
-                    "accidentări sau cote dacă acestea nu sunt furnizate separat de API. "
-                    "Nu reprezintă garanție de rezultat."
-                )
+                c1.metric("Victorie gazde (1)", f"{probs['1']*100:.1f}%")
+                c2.metric("Egal (X)", f"{probs['X']*100:.1f}%")
+                c3.metric("Victorie oaspeți (2)", f"{probs['2']*100:.1f}%")
+                st.write(f"Goluri estimate: **{hl:.2f} – {al:.2f}**")
+                st.subheader("Piețe statistice")
+                market_rows = [
+                    {"Piață": key, "Probabilitate": f"{probs[key]*100:.1f}%"}
+                    for key in ["GG", "NG", "Over 1.5", "Under 1.5", "Over 2.5", "Under 2.5", "Over 3.5", "Under 3.5"]
+                ]
+                st.dataframe(pd.DataFrame(market_rows), use_container_width=True, hide_index=True)
+                st.subheader("Scoruri exacte cu probabilitate estimată")
+                st.dataframe(pd.DataFrame([
+                    {"Scor": f"{h}-{a}", "Probabilitate": f"{p*100:.1f}%"}
+                    for p, h, a in probs["scores"]
+                ]), use_container_width=True, hide_index=True)
+                st.caption(f"Eșantion folosit: {len(home_recent)} meciuri pentru gazde și {len(away_recent)} pentru oaspeți.")
             except Exception as exc:
                 st.error(f"Analiza nu a putut fi calculată: {exc}")
-                st.caption("Mesajul de mai sus este eroarea detaliată returnată de aplicație/API.")
+    elif st.session_state.get("fixtures_date") == selected_date.isoformat():
+        st.warning("Nu au fost găsite meciuri pentru data aleasă.")
 
-with tab_manual:
+with tab2:
     st.subheader("Analiză manuală")
-    col1, col2 = st.columns(2)
-    with col1:
+    c1, c2 = st.columns(2)
+    with c1:
         home_name = st.text_input("Echipa gazdă", "Gazde")
-        home_avg = st.number_input("Goluri marcate acasă / meci", 0.1, 5.0, 1.5, 0.1)
-    with col2:
+        home_scored = st.number_input("Media golurilor marcate de gazde", min_value=0.0, max_value=5.0, value=1.4, step=0.1)
+        home_conceded = st.number_input("Media golurilor primite de gazde", min_value=0.0, max_value=5.0, value=1.1, step=0.1)
+    with c2:
         away_name = st.text_input("Echipa oaspete", "Oaspeți")
-        away_avg = st.number_input("Goluri marcate în deplasare / meci", 0.1, 5.0, 1.1, 0.1)
-    if st.button("Calculează manual"):
-        p = poisson_markets(home_avg, away_avg)
-        st.write(f"**{home_name}** {percent(p['1'])} | **X** {percent(p['X'])} | **{away_name}** {percent(p['2'])}")
-        st.write(f"GG: {percent(p['GG'])} | NG: {percent(p['NG'])}")
-        for line, over in p["over"].items():
-            st.write(f"Over {line}: {percent(over)} / Under {line}: {percent(1-over)}")
+        away_scored = st.number_input("Media golurilor marcate de oaspeți", min_value=0.0, max_value=5.0, value=1.2, step=0.1)
+        away_conceded = st.number_input("Media golurilor primite de oaspeți", min_value=0.0, max_value=5.0, value=1.3, step=0.1)
+    if st.button("Calculează analiza manuală"):
+        hl = max(0.15, (home_scored + away_conceded)/2)
+        al = max(0.15, (away_scored + home_conceded)/2)
+        probs = match_probabilities(hl, al)
+        st.write(f"**{home_name} – {away_name}** | Goluri estimate: {hl:.2f} – {al:.2f}")
+        st.write(f"1: **{probs['1']*100:.1f}%** · X: **{probs['X']*100:.1f}%** · 2: **{probs['2']*100:.1f}%**")
+        st.write(f"GG: **{probs['GG']*100:.1f}%** · Over 2.5: **{probs['Over 2.5']*100:.1f}%**")
 
-with tab_history:
-    st.subheader("Verificare acces istoric API")
-    st.write("Acest test verifică dacă API-ul permite citirea meciurilor încheiate pentru competiția și sezonul introduse.")
-    league_id = st.number_input("ID competiție (league)", min_value=1, value=39, step=1)
-    season = st.number_input("Sezon (an de început)", min_value=2000, max_value=2100, value=date.today().year, step=1)
-    if st.button("Verifică datele istorice"):
+with tab3:
+    st.subheader("Verificare conexiune API")
+    if st.button("Testează cheia API"):
         try:
-            payload = api_get("fixtures", {"league": int(league_id), "season": int(season), "status": "FT"}, api_key)
-            rows = finished_fixture_rows(payload)
-            st.success(f"API a returnat {len(rows)} meciuri încheiate pentru competiția {league_id}, sezonul {season}.")
-            if rows:
-                sample = []
-                for r in rows[:10]:
-                    sample.append({
-                        "Data": r["fixture"].get("date", "")[:10],
-                        "Gazde": r["teams"]["home"]["name"],
-                        "Oaspeți": r["teams"]["away"]["name"],
-                        "Scor": f"{r['goals']['home']}–{r['goals']['away']}",
-                    })
-                st.dataframe(pd.DataFrame(sample), use_container_width=True)
+            leagues, count = api_get("leagues", api_key, {"current": "true"})
+            st.success(f"Conexiune reușită. API-ul a returnat {count} competiții.")
         except Exception as exc:
-            st.error(f"Testul istoric a eșuat: {exc}")
-
-st.divider()
-st.caption("FOOTBALL AI PRO • Datele și endpoint-urile disponibile depind de abonamentul API-FOOTBALL.")
+            st.error(str(exc))
