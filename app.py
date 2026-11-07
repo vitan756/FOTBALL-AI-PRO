@@ -914,6 +914,280 @@ if "predictii" in globals() and isinstance(predictii, list) and predictii:
             "date istorice separate pentru reprize."
         )
         
+# ==========================================
+# MODUL PAUZA / FINAL - OPENLIGADB
+# FOOTBALL AI PRO
+# ADAUGARE SEPARATA LA FINAL
+# ==========================================
+
+import math
+import pandas as pd
+import streamlit as st
+from datetime import datetime
+
+if (
+    "predictii" in globals()
+    and isinstance(predictii, list)
+    and predictii
+    and "toate_meciurile" in globals()
+    and "openliga_data" in globals()
+):
+
+    def fap_resultat(meci, tip):
+        rezultate = meci.get("matchResults") or []
+
+        for rezultat in rezultate:
+            if int(rezultat.get("resultTypeID", 0)) == tip:
+                return (
+                    int(rezultat["pointsTeam1"]),
+                    int(rezultat["pointsTeam2"])
+                )
+
+        return None
+
+    def fap_forma_repriza(echipa, data_limita, istoric):
+
+        rezultate = []
+
+        for meci_istoric in istoric:
+            try:
+                if not meci_istoric.get("matchIsFinished"):
+                    continue
+
+                data_veche = openliga_data(meci_istoric)
+
+                if data_veche.replace(tzinfo=None) >= data_limita:
+                    continue
+
+                pauza = fap_resultat(meci_istoric, 1)
+                final = fap_resultat(meci_istoric, 2)
+
+                if pauza is None or final is None:
+                    continue
+
+                gazde = meci_istoric["team1"]["teamName"]
+                oaspeti = meci_istoric["team2"]["teamName"]
+
+                if echipa == gazde:
+                    pauza_for = pauza[0]
+                    pauza_against = pauza[1]
+                    final_for = final[0]
+                    final_against = final[1]
+
+                elif echipa == oaspeti:
+                    pauza_for = pauza[1]
+                    pauza_against = pauza[0]
+                    final_for = final[1]
+                    final_against = final[0]
+
+                else:
+                    continue
+
+                rezultate.append({
+                    "pauza_for": pauza_for,
+                    "pauza_against": pauza_against,
+                    "repriza2_for": max(0, final_for - pauza_for),
+                    "repriza2_against": max(
+                        0, final_against - pauza_against
+                    )
+                })
+
+            except Exception:
+                continue
+
+        rezultate.sort(
+            key=lambda x: x["pauza_for"] + x["pauza_against"]
+        )
+
+        return rezultate[-8:]
+
+    def fap_media(lista, cheie):
+        return sum(x[cheie] for x in lista) / len(lista)
+
+    def fap_poisson(lam, goluri):
+        return (
+            math.exp(-lam) * lam ** goluri
+            / math.factorial(goluri)
+        )
+
+    def fap_probabilitati(lam_gazde, lam_oaspeti):
+
+        p1 = 0
+        px = 0
+        p2 = 0
+        total = 0
+
+        for g in range(9):
+            for o in range(9):
+                p = (
+                    fap_poisson(lam_gazde, g)
+                    * fap_poisson(lam_oaspeti, o)
+                )
+
+                total += p
+
+                if g > o:
+                    p1 += p
+                elif g == o:
+                    px += p
+                else:
+                    p2 += p
+
+        if total:
+            return p1 / total, px / total, p2 / total
+
+        return 0, 0, 0
+
+    rezultate_repriza = []
+    istoric_repriza = toate_meciurile
+
+    for predictie in predictii:
+
+        try:
+            gazde, oaspeti = predictie["Meci"].split(" - ", 1)
+
+            data_limita = datetime.strptime(
+                predictie["Data"],
+                "%d.%m.%Y %H:%M"
+            )
+
+            forma_g = fap_forma_repriza(
+                gazde, data_limita, istoric_repriza
+            )
+
+            forma_o = fap_forma_repriza(
+                oaspeti, data_limita, istoric_repriza
+            )
+
+            if len(forma_g) < 3 or len(forma_o) < 3:
+                continue
+
+            # Goluri estimate in prima repriza
+            lam_g_pauza = (
+                fap_media(forma_g, "pauza_for")
+                + fap_media(forma_o, "pauza_against")
+            ) / 2
+
+            lam_o_pauza = (
+                fap_media(forma_o, "pauza_for")
+                + fap_media(forma_g, "pauza_against")
+            ) / 2
+
+            # Goluri estimate in repriza a doua
+            lam_g_r2 = (
+                fap_media(forma_g, "repriza2_for")
+                + fap_media(forma_o, "repriza2_against")
+            ) / 2
+
+            lam_o_r2 = (
+                fap_media(forma_o, "repriza2_for")
+                + fap_media(forma_g, "repriza2_against")
+            ) / 2
+
+            # Probabilitati prima repriza
+            total_pauza = lam_g_pauza + lam_o_pauza
+
+            peste05_pauza = 1 - math.exp(-total_pauza)
+
+            sub15_pauza = math.exp(-total_pauza) * (
+                1 + total_pauza
+            )
+
+            ht1, htx, ht2 = fap_probabilitati(
+                lam_g_pauza, lam_o_pauza
+            )
+
+            # Probabilitate GG repriza a doua
+            gg_r2 = (
+                (1 - math.exp(-lam_g_r2))
+                * (1 - math.exp(-lam_o_r2))
+            )
+
+            # Probabilitati final preluate din motorul existent
+            ft1 = float(predictie["1"].replace("%", "")) / 100
+            ftx = float(predictie["X"].replace("%", "")) / 100
+            ft2 = float(predictie["2"].replace("%", "")) / 100
+
+            # Combinatii Pauza / Final
+            combinatii = {
+                "1/1": ht1 * ft1,
+                "1/X": ht1 * ftx,
+                "1/2": ht1 * ft2,
+                "X/1": htx * ft1,
+                "X/X": htx * ftx,
+                "X/2": htx * ft2,
+                "2/1": ht2 * ft1,
+                "2/X": ht2 * ftx,
+                "2/2": ht2 * ft2
+            }
+
+            combinatie_principala = max(
+                combinatii,
+                key=combinatii.get
+            )
+
+            rezultate_repriza.append({
+                "Data": predictie["Data"],
+                "Meci": predictie["Meci"],
+                "Peste 0.5 pauza": f"{peste05_pauza*100:.1f}%",
+                "Sub 1.5 pauza": f"{sub15_pauza*100:.1f}%",
+                "Pauza 1": f"{ht1*100:.1f}%",
+                "Pauza X": f"{htx*100:.1f}%",
+                "Pauza 2": f"{ht2*100:.1f}%",
+                "GG repriza 2": f"{gg_r2*100:.1f}%",
+                "Pauza/Final": combinatie_principala,
+                "Probabilitate P/F": (
+                    f"{combinatii[combinatie_principala]*100:.1f}%"
+                ),
+                "Istoric echipe": (
+                    f"{len(forma_g)} / {len(forma_o)}"
+                )
+            })
+
+        except Exception:
+            continue
+
+    st.divider()
+    st.header("ANALIZA PAUZA / FINAL")
+
+    if rezultate_repriza:
+
+        tabel_repriza = pd.DataFrame(rezultate_repriza)
+
+        st.success(
+            f"Analizate {len(rezultate_repriza)} meciuri "
+            "cu istoric disponibil la pauza."
+        )
+
+        st.dataframe(
+            tabel_repriza,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        st.download_button(
+            "Descarca analiza Pauza / Final CSV",
+            data=tabel_repriza.to_csv(
+                index=False
+            ).encode("utf-8-sig"),
+            file_name="football_ai_pro_pauza_final.csv",
+            mime="text/csv",
+            key="descarca_pauza_final"
+        )
+
+    else:
+        st.warning(
+            "Nu exista suficiente rezultate istorice la pauza "
+            "pentru meciurile selectate sau campionatul nu furnizeaza "
+            "datele necesare."
+        )
+
+else:
+    st.info(
+        "Modulul Pauza / Final asteapta datele motorului principal."
+                )
+        
+        
         
         
     
