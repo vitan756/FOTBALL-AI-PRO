@@ -265,3 +265,58 @@ if st.button("Încarcă campionatele gratuite"):
             st.dataframe(campionate, use_container_width=True)
     except Exception as e:
         st.error(f"Eroare la sursa gratuită: {e}")
+
+# MECIURI GRATUITE OPENLIGADB
+@st.cache_data(ttl=1800)
+def incarca_meciuri_gratuite(cod_liga, sezon):
+    url = f"https://api.openligadb.de/getmatchdata/{cod_liga}/{sezon}"
+    r = requests.get(url, timeout=20)
+    r.raise_for_status()
+    date = r.json()
+
+    rezultate = []
+    for m in date:
+        echipa1 = m.get("team1", {}).get("teamName", "")
+        echipa2 = m.get("team2", {}).get("teamName", "")
+        scoruri = m.get("matchResults", [])
+        scor = next(
+            (x for x in scoruri if x.get("resultTypeID") == 2),
+            scoruri[-1] if scoruri else {}
+        )
+        rezultate.append({
+            "Data": m.get("matchDateTime", ""),
+            "Gazde": echipa1,
+            "Oaspeți": echipa2,
+            "Goluri gazde": scor.get("pointsTeam1"),
+            "Goluri oaspeți": scor.get("pointsTeam2")
+        })
+
+    return pd.DataFrame(rezultate)
+
+
+st.divider()
+st.subheader("⚽ MECIURI DIN SURSA GRATUITĂ")
+
+try:
+    lista_ligi = meciuri_gratuite(sezon_gratuit)
+
+    if not lista_ligi.empty:
+        liga_aleasa = st.selectbox(
+            "Alege campionatul",
+            lista_ligi.to_dict("records"),
+            format_func=lambda x: x["Campionat"]
+        )
+
+        if st.button("Încarcă meciurile campionatului"):
+            meciuri = incarca_meciuri_gratuite(
+                liga_aleasa["Cod"],
+                liga_aleasa["Sezon"]
+            )
+            if meciuri.empty:
+                st.warning("Nu există meciuri pentru acest campionat.")
+            else:
+                st.dataframe(meciuri, use_container_width=True)
+    else:
+        st.warning("Nu există campionate disponibile.")
+except Exception as e:
+    st.error(f"Eroare la încărcarea meciurilor: {e}")
