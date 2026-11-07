@@ -67,11 +67,9 @@ def match_probabilities(home_lambda, away_lambda, max_goals=8):
     Piețe suplimentare calculate din distribuția Poisson.
     Valorile returnate sunt procente 0-100.
     """
-
     def matrix(lam_h, lam_a, max_goals=10):
         rezultate = []
         total = 0.0
-
         for h in range(max_goals + 1):
             for a in range(max_goals + 1):
                 p = poisson(lam_h, h) * poisson(lam_a, a)
