@@ -640,3 +640,5 @@ try:
                 st.warning(
                     "Nu există meciuri viitoare cu suficient istoric "
                     "pentru predicții în acest campionat."
+                )
+                
