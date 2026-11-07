@@ -142,7 +142,8 @@ with st.sidebar:
     st.write("Plan Free: aplicația folosește intervale de date, nu parametrul `last`.")
 
     if not api_key:
-    st.info("Introdu cheia API Ninjas în meniul din stânga.")
+        st.info("Introdu cheia API
+        Ninjas în meniul din stânga.")
 
 
 
