@@ -791,5 +791,129 @@ if "predictii" in globals() and predictii:
             key="descarca_goluri_extra"
         )
         
+# ==========================================
+# MODUL INTELIGENT - FOOTBALL AI PRO
+# TOP 10 SI ANALIZA AVANSATA
+# ==========================================
+
+if "predictii" in globals() and isinstance(predictii, list) and predictii:
+
+    import pandas as pd
+    import streamlit as st
+
+    analiza_inteligenta = []
+
+    for meci in predictii:
+
+        try:
+            p1 = float(meci["1"].replace("%", ""))
+            px = float(meci["X"].replace("%", ""))
+            p2 = float(meci["2"].replace("%", ""))
+            gg = float(meci["GG"].replace("%", ""))
+            over25 = float(meci["Peste 2.5"].replace("%", ""))
+
+            variante = {
+                "1": p1,
+                "X": px,
+                "2": p2,
+                "1X": p1 + px,
+                "X2": px + p2,
+                "12": p1 + p2,
+                "GG": gg,
+                "NG": 100 - gg,
+                "Peste 2.5": over25,
+                "Sub 2.5": 100 - over25
+            }
+
+            cel_mai_bun = max(
+                variante,
+                key=variante.get
+            )
+
+            probabilitate = variante[cel_mai_bun]
+
+            if probabilitate >= 75:
+                risc = "Mic"
+            elif probabilitate >= 60:
+                risc = "Mediu"
+            else:
+                risc = "Mare"
+
+            analiza_inteligenta.append({
+                "Meci": meci["Meci"],
+                "Data": meci["Data"],
+                "Pronostic principal": cel_mai_bun,
+                "Probabilitate": probabilitate,
+                "Risc": risc,
+                "Scor estimat": meci.get(
+                    "Scor estimat",
+                    "Nedisponibil"
+                ),
+                "GG": gg,
+                "Peste 2.5": over25
+            })
+
+        except (KeyError, ValueError, TypeError):
+            continue
+
+    if analiza_inteligenta:
+
+        st.divider()
+        st.header("🧠 ANALIZĂ INTELIGENTĂ")
+
+        analiza_inteligenta.sort(
+            key=lambda x: x["Probabilitate"],
+            reverse=True
+        )
+
+        top10_inteligent = analiza_inteligenta[:10]
+
+        tabel_inteligent = pd.DataFrame(
+            top10_inteligent
+        )
+
+        tabel_inteligent["Probabilitate"] = (
+            tabel_inteligent["Probabilitate"].map(
+                lambda x: f"{x:.1f}%"
+            )
+        )
+
+        tabel_inteligent["GG"] = (
+            tabel_inteligent["GG"].map(
+                lambda x: f"{x:.1f}%"
+            )
+        )
+
+        tabel_inteligent["Peste 2.5"] = (
+            tabel_inteligent["Peste 2.5"].map(
+                lambda x: f"{x:.1f}%"
+            )
+        )
+
+        st.subheader("TOP 10 OPORTUNITĂȚI")
+
+        st.dataframe(
+            tabel_inteligent,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        st.download_button(
+            "Descarcă analiza inteligentă",
+            data=tabel_inteligent.to_csv(
+                index=False
+            ).encode("utf-8-sig"),
+            file_name="football_ai_pro_analiza.csv",
+            mime="text/csv",
+            key="descarca_analiza_inteligenta"
+        )
+
+        st.info(
+            "Pauză/Final și golurile din prima repriză "
+            "nu sunt calculate: motorul actual nu are "
+            "date istorice separate pentru reprize."
+        )
+        
+        
         
     
