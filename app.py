@@ -183,6 +183,18 @@ with tab1:
                     away_recent = team_recent(away["id"], api_key, selected_date)
                     hl, al = expected_goals(home_recent, away_recent, home["id"], away["id"])
                     probs = match_probabilities(hl, al)
+                                        api_prediction = None
+                    prediction_error = None
+                    try:
+                        prediction_rows, _ = api_get(
+                            "predictions",
+                            api_key,
+                            {"fixture": match["fixture"]["id"]},
+                        )
+                        if prediction_rows:
+                            api_prediction = prediction_rows[0].get("predictions", {})
+                    except Exception as pred_exc:
+                        prediction_error = str(pred_exc)
                 c1, c2, c3 = st.columns(3)
                 c1.metric("Victorie gazde (1)", f"{probs['1']*100:.1f}%")
                 c2.metric("Egal (X)", f"{probs['X']*100:.1f}%")
