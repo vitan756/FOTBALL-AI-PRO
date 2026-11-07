@@ -83,20 +83,31 @@ def completed_fixtures(rows):
     return sorted(done, key=lambda x: x.get("fixture", {}).get("timestamp", 0), reverse=True)
 
 def team_recent(team_id, api_key, today):
-    # Compatibil cu planul gratuit: folosim intervalul from/to.
-    # NU folosim parametrul last, care nu este disponibil pe Free.
+    # Compatibil cu planul gratuit: folosim from/to + season, fara parametrul last.
+    # API-Football cere season atunci cand este folosit filtrul team.
     start = today - timedelta(days=365)
-    rows, _ = api_get(
-        "fixtures",
-        api_key,
-        {
-            "team": team_id,
-            "from": start.isoformat(),
-            "to": today.isoformat(),
-            "timezone": "Europe/Bucharest",
-        },
-    )
-    return completed_fixtures(rows)[:10]
+    all_rows = []
+    for season in range(start.year, today.year + 1):
+        rows, _ = api_get(
+            "fixtures",
+            api_key,
+            {
+                "team": team_id,
+                "season": season,
+                "from": start.isoformat(),
+                "to": today.isoformat(),
+                "timezone": "Europe/Bucharest",
+            },
+        )
+        all_rows.extend(rows)
+
+    # Elimină eventualele duplicate și păstrează doar meciurile încheiate.
+    unique = {}
+    for item in all_rows:
+        fixture_id = item.get("fixture", {}).get("id")
+        if fixture_id is not None:
+            unique[fixture_id] = item
+    return completed_fixtures(list(unique.values()))[:10]
 
 def team_rates(fixtures, team_id, home_venue):
     scored, conceded = [], []
