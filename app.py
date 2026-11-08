@@ -2298,6 +2298,44 @@ if "fap_meciuri_auto" in st.session_state:
             "în campionatele OpenLigaDB selectate."
         )
         
+# ===== DIAGNOSTIC MOTOR FOOTBALL AI PRO =====
+import inspect
+
+with st.expander("🔧 DIAGNOSTIC MOTOR DE PREDICȚII", expanded=True):
+
+    functii_cautate = [
+        "calculate_expected_goals",
+        "poisson_analysis",
+        "poisson_probability",
+        "get_history",
+        "poisson_scor"
+    ]
+
+    gasite = []
+
+    for nume in functii_cautate:
+        functie = globals().get(nume)
+
+        if callable(functie):
+            try:
+                semnatura = str(inspect.signature(functie))
+            except Exception:
+                semnatura = "Semnătură indisponibilă"
+
+            gasite.append(nume)
+            st.success(f"✅ {nume}{semnatura}")
+        else:
+            st.warning(f"❌ Nu există: {nume}")
+
+    if gasite:
+        st.info(
+            f"Am găsit {len(gasite)} funcții din motorul de predicții."
+        )
+    else:
+        st.error("Nu am găsit funcțiile motorului vechi.")
+# ===== SFÂRȘIT DIAGNOSTIC =====
+
+        
         
     
     
