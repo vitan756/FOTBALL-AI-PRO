@@ -2185,6 +2185,119 @@ def superbet_bet_builder():
 # Afișare modul
 with st.expander("🎟️ SUPERBET BET BUILDER", expanded=False):
     superbet_bet_builder()
+    
+# =====================================================
+# FOOTBALL AI PRO - GENERATOR AUTOMAT DE BILETE
+# Sursa: OpenLigaDB
+# =====================================================
+
+import requests
+import streamlit as st
+import pandas as pd
+from datetime import datetime
+
+def fap_preia_meciuri():
+    ligi = [
+        ("bl1", "Germania"),
+        ("bl2", "Germania 2"),
+        ("bl3", "Germania 3"),
+        ("PL", "Anglia"),
+        ("DED", "Olanda"),
+        ("SA", "Italia"),
+        ("PD", "Spania"),
+        ("FL1", "Franta"),
+        ("BSA", "Brazilia")
+    ]
+
+    rezultate = []
+
+    for liga, tara in ligi:
+        try:
+            url = f"https://api.openligadb.de/getmatchdata/{liga}"
+            raspuns = requests.get(url, timeout=12)
+
+            if raspuns.status_code != 200:
+                continue
+
+            for meci in raspuns.json():
+                if meci.get("matchIsFinished"):
+                    continue
+
+                gazde = meci.get("team1", {}).get("teamName")
+                oaspeti = meci.get("team2", {}).get("teamName")
+                data = meci.get("matchDateTime")
+
+                if gazde and oaspeti and data:
+                    rezultate.append({
+                        "Liga": tara,
+                        "Gazde": gazde,
+                        "Oaspeti": oaspeti,
+                        "Data": data
+                    })
+
+        except Exception:
+            continue
+
+    return rezultate
+
+
+def fap_genereaza_bilete(meciuri, numar_selectii=3):
+
+    selectii = []
+
+    for meci in meciuri:
+        # Probabilitate neutră de pornire.
+        # Nu reprezintă o predicție calculată.
+        selectie = {
+            "Meci": f"{meci['Gazde']} - {meci['Oaspeti']}",
+            "Liga": meci["Liga"],
+            "Data": meci["Data"],
+            "Piata": "De analizat",
+            "Probabilitate": None
+        }
+
+        selectii.append(selectie)
+
+    return selectii
+
+
+st.divider()
+st.header("🤖 GENERATOR AUTOMAT DE BILETE")
+st.caption("Preluare automată a meciurilor din OpenLigaDB")
+
+if st.button("🔄 CAUTĂ MECIURI AUTOMAT", key="fap_auto_search"):
+
+    with st.spinner("Căutăm meciurile disponibile..."):
+        meciuri_auto = fap_preia_meciuri()
+
+    st.session_state["fap_meciuri_auto"] = meciuri_auto
+
+    st.success(f"Au fost găsite {len(meciuri_auto)} meciuri.")
+
+if "fap_meciuri_auto" in st.session_state:
+
+    meciuri_auto = st.session_state["fap_meciuri_auto"]
+
+    if meciuri_auto:
+
+        st.dataframe(
+            pd.DataFrame(meciuri_auto),
+            use_container_width=True,
+            hide_index=True
+        )
+
+        st.info(
+            "Meciurile sunt preluate automat. "
+            "Urmează conectarea selecțiilor la motorul "
+            "real de predicții FOOTBALL AI PRO."
+        )
+
+    else:
+        st.warning(
+            "Nu există meciuri disponibile momentan "
+            "în campionatele OpenLigaDB selectate."
+        )
+        
         
     
     
