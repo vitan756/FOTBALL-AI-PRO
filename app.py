@@ -2335,6 +2335,202 @@ with st.expander("🔧 DIAGNOSTIC MOTOR DE PREDICȚII", expanded=True):
         st.error("Nu am găsit funcțiile motorului vechi.")
 # ===== SFÂRȘIT DIAGNOSTIC =====
 
+# =====================================================
+# FOOTBALL AI PRO - AUTO VALUE SCANNER
+# =====================================================
+
+st.divider()
+st.header("💎 AUTO VALUE SCANNER PRO")
+
+st.caption(
+    "Analiză automată a probabilităților, cotelor corecte "
+    "și valorii statistice pentru meciurile calculate."
+)
+
+# Preluare automată a predicțiilor existente
+if isinstance(globals().get("predictii"), list) and predictii:
+    st.session_state["value_predictions"] = predictii.copy()
+
+value_predictions = st.session_state.get("value_predictions", [])
+
+if not value_predictions:
+    st.info(
+        "Calculează mai întâi predicțiile din motorul FOOTBALL AI PRO. "
+        "Scannerul va prelua automat rezultatele."
+    )
+else:
+    market_columns = [
+        "1", "X", "2", "GG", "Peste 2.5"
+    ]
+
+    if "value_odds" not in st.session_state:
+        st.session_state["value_odds"] = {}
+
+    scanner_rows = []
+
+    for match in value_predictions:
+        for market in market_columns:
+            raw_probability = match.get(market)
+
+            if raw_probability is None:
+                continue
+
+            try:
+                probability = float(
+                    str(raw_probability)
+                    .replace("%", "")
+                    .replace(",", ".")
+                ) / 100
+
+                if not 0 < probability < 1:
+                    continue
+
+                match_name = match.get("Meci", "Meci necunoscut")
+                match_date = match.get("Data", "")
+
+                key = f"{match_date}|{match_name}|{market}"
+
+                scanner_rows.append({
+                    "ID": key,
+                    "Data": match_date,
+                    "Meci": match_name,
+                    "Piață": market,
+                    "Probabilitate %": round(
+                        probability * 100, 2
+                    ),
+                    "Cotă corectă": round(
+                        1 / probability, 2
+                    ),
+                    "Cotă bookmaker": st.session_state[
+                        "value_odds"
+                    ].get(key)
+                })
+
+            except (ValueError, TypeError):
+                continue
+
+    if scanner_rows:
+        df_scanner = pd.DataFrame(scanner_rows)
+
+        st.metric(
+            "Selecții analizate",
+            len(df_scanner)
+        )
+
+        st.write(
+            "Cotele corecte sunt calculate automat. "
+            "Completează cota reală disponibilă pentru a calcula EV."
+        )
+
+        edited = st.data_editor(
+            df_scanner,
+            use_container_width=True,
+            hide_index=True,
+            disabled=[
+                "ID",
+                "Data",
+                "Meci",
+                "Piață",
+                "Probabilitate %",
+                "Cotă corectă"
+            ],
+            column_config={
+                "ID": None,
+                "Cotă bookmaker": st.column_config.NumberColumn(
+                    "Cotă reală bookmaker",
+                    min_value=1.01,
+                    max_value=1000.0,
+                    step=0.01,
+                    format="%.2f"
+                )
+            },
+            key="value_scanner_editor"
+        )
+
+        for _, row in edited.iterrows():
+            st.session_state["value_odds"][
+                row["ID"]
+            ] = row["Cotă bookmaker"]
+
+        results = []
+
+        for _, row in edited.iterrows():
+            probability = float(row["Probabilitate %"]) / 100
+            odds = row["Cotă bookmaker"]
+
+            if pd.isna(odds) or float(odds) <= 1:
+                continue
+
+            odds = float(odds)
+            ev = (probability * odds - 1) * 100
+
+            if ev >= 5:
+                verdict = "VALUE POTENȚIAL"
+            elif ev > 0:
+                verdict = "VALOARE MICĂ"
+            else:
+                verdict = "FĂRĂ VALOARE"
+
+            results.append({
+                "Data": row["Data"],
+                "Meci": row["Meci"],
+                "Piață": row["Piață"],
+                "Probabilitate": round(probability * 100, 2),
+                "Cotă reală": odds,
+                "Cotă corectă": row["Cotă corectă"],
+                "EV %": round(ev, 2),
+                "Verdict": verdict
+            })
+
+        if results:
+            df_results = pd.DataFrame(results)
+            df_results = df_results.sort_values(
+                "EV %",
+                ascending=False
+            )
+
+            st.subheader("🏆 Clasament VALUE BET")
+            st.dataframe(
+                df_results,
+                use_container_width=True,
+                hide_index=True
+            )
+
+            value_count = int(
+                (df_results["EV %"] >= 5).sum()
+            )
+
+            c1, c2 = st.columns(2)
+            c1.metric("Value bets potențiale", value_count)
+            c2.metric(
+                "Cel mai mare EV",
+                f'{df_results["EV %"].max():.2f}%'
+            )
+
+            st.download_button(
+                "📥 Descarcă raportul VALUE BET",
+                data=df_results.to_csv(
+                    index=False
+                ).encode("utf-8-sig"),
+                file_name="football_ai_value_scanner.csv",
+                mime="text/csv"
+            )
+        else:
+            st.info(
+                "Introdu cotele reale pentru a calcula EV."
+            )
+
+    else:
+        st.warning(
+            "Nu există probabilități compatibile în predicțiile salvate."
+        )
+
+st.caption(
+    "EV pozitiv nu garantează profit. Cotele reale trebuie verificate "
+    "la bookmaker. Modelul necesită validare și calibrare istorică."
+)
+
+
         
         
     
