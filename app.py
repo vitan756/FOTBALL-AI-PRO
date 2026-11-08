@@ -2906,6 +2906,116 @@ else:
             f'{st.session_state["auto_odds_no_odds"]}'
                         )
         
+# ==========================================================
+# FOOTBALL AI PRO - DATA QUALITY AUDIT
+# Verifica datele disponibile pentru fiecare predictie
+# ==========================================================
+
+try:
+    import pandas as pd
+    import streamlit as st
+
+    st.divider()
+    st.header("🧠 FOOTBALL AI PRO – Verificare inteligenta a datelor")
+
+    if "predictii" in globals() and predictii:
+
+        audit = []
+
+        for p in predictii:
+            meci = str(p.get("Meci", "Meci necunoscut"))
+
+            analizate = p.get("Meciuri analizate", 0)
+            try:
+                analizate = int(float(str(analizate).replace(",", ".")))
+            except:
+                analizate = 0
+
+            scor = p.get("Scor estimat", "Necunoscut")
+
+            probabilitati = [
+                p.get("1"),
+                p.get("X"),
+                p.get("2"),
+                p.get("GG"),
+                p.get("Peste 2.5")
+            ]
+
+            are_prob = any(x not in [None, "", "N/A"] for x in probabilitati)
+
+            if analizate >= 10:
+                nivel = "Baza statistica buna"
+            elif analizate >= 5:
+                nivel = "Baza statistica limitata"
+            else:
+                nivel = "Prea putine date"
+
+            lipsuri = []
+
+            if analizate < 10:
+                lipsuri.append("Istoric insuficient")
+
+            if not are_prob:
+                lipsuri.append("Probabilitati lipsa")
+
+            # Aceste informatii nu sunt furnizate automat
+            # de sursa OpenLigaDB folosita in versiunea actuala.
+            lipsuri.extend([
+                "Accidentari si suspendari neverificate",
+                "Echipe probabile neverificate",
+                "xG indisponibil",
+                "Cote reale indisponibile"
+            ])
+
+            audit.append({
+                "Meci": meci,
+                "Meciuri analizate": analizate,
+                "Scor estimat": scor,
+                "Nivel date": nivel,
+                "Informatii lipsa": ", ".join(lipsuri)
+            })
+
+        df_audit = pd.DataFrame(audit)
+
+        st.dataframe(
+            df_audit,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        bune = sum(
+            1 for x in audit
+            if x["Meciuri analizate"] >= 10
+        )
+
+        st.metric(
+            "Meciuri cu minimum 10 partide analizate",
+            f"{bune}/{len(audit)}"
+        )
+
+        st.warning(
+            "Atentie: aceasta verificare arata ce date are "
+            "motorul actual. Nu confirma automat accidentarile, "
+            "titularii, xG sau cotele caselor de pariuri."
+        )
+
+        st.download_button(
+            "Descarca raportul verificarii",
+            data=df_audit.to_csv(index=False).encode("utf-8-sig"),
+            file_name="football_ai_pro_verificare.csv",
+            mime="text/csv"
+        )
+
+    else:
+        st.info(
+            "Inca nu exista predictii. Incarca meciurile "
+            "si ruleaza analiza pentru a verifica datele."
+        )
+
+except Exception as e:
+    st.error(f"Eroare la verificarea datelor: {e}")
+    
+        
 
 
         
