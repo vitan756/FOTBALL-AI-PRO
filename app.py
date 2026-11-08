@@ -2530,6 +2530,383 @@ st.caption(
     "la bookmaker. Modelul necesită validare și calibrare istorică."
 )
 
+# =====================================================
+# FOOTBALL AI PRO - AUTO ODDS FREE
+# Preluare automata cote API-FOOTBALL
+# =====================================================
+
+import unicodedata
+import re
+from difflib import SequenceMatcher
+from datetime import datetime
+
+@st.cache_data(ttl=10800, show_spinner=False)
+def auto_odds_get(api_key, match_date):
+    url = "https://v3.football.api-sports.io/odds"
+    response = requests.get(
+        url,
+        headers={"x-apisports-key": api_key},
+        params={
+            "date": match_date,
+            "timezone": "Europe/Bucharest"
+        },
+        timeout=30
+    )
+    response.raise_for_status()
+    payload = response.json()
+
+    if payload.get("errors"):
+        raise RuntimeError(str(payload["errors"]))
+
+    return payload.get("response", [])
+
+
+def odds_normalize(name):
+    name = str(name or "").lower()
+    name = unicodedata.normalize("NFKD", name)
+    name = "".join(
+        c for c in name
+        if not unicodedata.combining(c)
+    )
+    name = re.sub(r"[^a-z0-9 ]", " ", name)
+    return " ".join(name.split())
+
+
+def odds_similarity(a, b):
+    a = odds_normalize(a)
+    b = odds_normalize(b)
+
+    if not a or not b:
+        return 0
+
+    sequence = SequenceMatcher(None, a, b).ratio()
+
+    tokens_a = set(a.split())
+    tokens_b = set(b.split())
+
+    overlap = (
+        len(tokens_a & tokens_b) /
+        max(1, len(tokens_a | tokens_b))
+    )
+
+    return max(sequence, overlap)
+
+
+def odds_find_match(prediction, api_matches):
+    parts = str(prediction.get("Meci", "")).split(" - ", 1)
+
+    if len(parts) != 2:
+        return None
+
+    home, away = parts
+
+    best_match = None
+    best_score = 0
+
+    for item in api_matches:
+        teams = item.get("teams", {})
+        api_home = teams.get("home", {}).get("name", "")
+        api_away = teams.get("away", {}).get("name", "")
+
+        home_score = odds_similarity(home, api_home)
+        away_score = odds_similarity(away, api_away)
+
+        score = (home_score + away_score) / 2
+
+        if (
+            home_score >= 0.70
+            and away_score >= 0.70
+            and score > best_score
+        ):
+            best_score = score
+            best_match = item
+
+    if best_score >= 0.76:
+        return best_match
+
+    return None
+
+
+def odds_extract_markets(item):
+    found = {}
+
+    for bookmaker in item.get("bookmakers", []):
+        bookmaker_name = bookmaker.get("name", "Necunoscut")
+
+        for bet in bookmaker.get("bets", []):
+            bet_name = odds_normalize(bet.get("name", ""))
+
+            for value in bet.get("values", []):
+                selection = odds_normalize(value.get("value", ""))
+
+                try:
+                    odd = float(value.get("odd"))
+                except (ValueError, TypeError):
+                    continue
+
+                if odd <= 1:
+                    continue
+
+                market = None
+
+                if (
+                    "match winner" in bet_name
+                    or bet_name == "1x2"
+                ):
+                    mapping = {
+                        "home": "1",
+                        "draw": "X",
+                        "away": "2"
+                    }
+                    market = mapping.get(selection)
+
+                elif "both teams score" in bet_name:
+                    mapping = {
+                        "yes": "GG",
+                        "no": "NG"
+                    }
+                    market = mapping.get(selection)
+
+                elif (
+                    "goals over under" in bet_name
+                    or "over under" in bet_name
+                ):
+                    if selection in ("over 2.5", "over 2 5"):
+                        market = "Peste 2.5"
+
+                if market:
+                    if (
+                        market not in found
+                        or odd > found[market]["Cota"]
+                    ):
+                        found[market] = {
+                            "Cota": odd,
+                            "Bookmaker": bookmaker_name
+                        }
+
+    return found
+
+
+st.divider()
+st.header("🌐 AUTO ODDS FREE - COTE AUTOMATE")
+
+st.caption(
+    "Caută automat cotele pre-meci disponibile prin API-FOOTBALL "
+    "și le compară cu predicțiile proprii."
+)
+
+if not api_key:
+    st.warning(
+        "Introdu cheia API-FOOTBALL în meniul din stânga."
+    )
+else:
+    auto_predictions = st.session_state.get(
+        "value_predictions", []
+    )
+
+    if not auto_predictions and isinstance(
+        globals().get("predictii"), list
+    ):
+        auto_predictions = predictii
+
+    if not auto_predictions:
+        st.info(
+            "Calculează mai întâi predicțiile în motorul gratuit."
+        )
+
+    elif st.button(
+        "🔎 CAUTĂ AUTOMAT COTELE",
+        type="primary",
+        key="auto_odds_button"
+    ):
+        try:
+            with st.spinner(
+                "Caut cotele disponibile și compar meciurile..."
+            ):
+                dates_to_check = set()
+
+                for prediction in auto_predictions:
+                    try:
+                        match_date = datetime.strptime(
+                            prediction["Data"],
+                            "%d.%m.%Y %H:%M"
+                        ).strftime("%Y-%m-%d")
+
+                        dates_to_check.add(match_date)
+
+                    except (ValueError, TypeError, KeyError):
+                        continue
+
+                dates_to_check = sorted(dates_to_check)[:10]
+
+                odds_by_date = {}
+
+                for match_date in dates_to_check:
+                    odds_by_date[match_date] = auto_odds_get(
+                        api_key,
+                        match_date
+                    )
+
+                auto_results = []
+                no_odds = 0
+                no_match = 0
+
+                for prediction in auto_predictions:
+                    try:
+                        match_date = datetime.strptime(
+                            prediction["Data"],
+                            "%d.%m.%Y %H:%M"
+                        ).strftime("%Y-%m-%d")
+                    except (ValueError, TypeError, KeyError):
+                        continue
+
+                    available = odds_by_date.get(
+                        match_date, []
+                    )
+
+                    api_match = odds_find_match(
+                        prediction,
+                        available
+                    )
+
+                    if not api_match:
+                        no_match += 1
+                        continue
+
+                    markets = odds_extract_markets(api_match)
+
+                    if not markets:
+                        no_odds += 1
+                        continue
+
+                    model_markets = {
+                        "1": "1",
+                        "X": "X",
+                        "2": "2",
+                        "GG": "GG",
+                        "Peste 2.5": "Peste 2.5"
+                    }
+
+                    for market, column in model_markets.items():
+                        if market not in markets:
+                            continue
+
+                        try:
+                            probability = float(
+                                str(prediction[column])
+                                .replace("%", "")
+                                .replace(",", ".")
+                            ) / 100
+                        except (ValueError, TypeError, KeyError):
+                            continue
+
+                        if not 0 < probability < 1:
+                            continue
+
+                        odd_data = markets[market]
+                        odd = odd_data["Cota"]
+                        ev = (probability * odd - 1) * 100
+
+                        auto_results.append({
+                            "Data": prediction["Data"],
+                            "Meci": prediction["Meci"],
+                            "Piață": market,
+                            "Probabilitate %": round(
+                                probability * 100, 2
+                            ),
+                            "Cotă reală": odd,
+                            "Bookmaker": odd_data["Bookmaker"],
+                            "Cotă corectă": round(
+                                1 / probability, 2
+                            ),
+                            "EV %": round(ev, 2),
+                            "Verdict": (
+                                "VALUE POTENȚIAL"
+                                if ev >= 5
+                                else "VALOARE MICĂ"
+                                if ev > 0
+                                else "FĂRĂ VALOARE"
+                            )
+                        })
+
+                st.session_state["auto_odds_results"] = auto_results
+                st.session_state["auto_odds_no_match"] = no_match
+                st.session_state["auto_odds_no_odds"] = no_odds
+
+        except Exception as exc:
+            st.error(
+                f"Nu am putut prelua cotele: {exc}"
+            )
+
+    auto_results = st.session_state.get(
+        "auto_odds_results", []
+    )
+
+    if auto_results:
+        df_auto = pd.DataFrame(auto_results)
+        df_auto = df_auto.sort_values(
+            "EV %",
+            ascending=False
+        )
+
+        st.success(
+            f"Au fost găsite {len(df_auto)} cote disponibile."
+        )
+
+        c1, c2, c3 = st.columns(3)
+
+        c1.metric(
+            "Piețe cu cote",
+            len(df_auto)
+        )
+
+        c2.metric(
+            "VALUE potențiale",
+            int((df_auto["EV %"] >= 5).sum())
+        )
+
+        c3.metric(
+            "EV maxim",
+            f'{df_auto["EV %"].max():.2f}%'
+        )
+
+        st.subheader("🏆 Clasament automat după EV")
+
+        st.dataframe(
+            df_auto,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        st.download_button(
+            "📥 Descarcă raportul cotelor automate",
+            data=df_auto.to_csv(
+                index=False
+            ).encode("utf-8-sig"),
+            file_name="football_ai_auto_odds.csv",
+            mime="text/csv"
+        )
+
+        st.caption(
+            "Cotele sunt cele mai mari găsite între bookmakerii "
+            "returnați de API, nu neapărat cotele Superbet."
+        )
+
+    elif "auto_odds_results" in st.session_state:
+        st.warning(
+            "Nu au fost găsite cote potrivite pentru meciurile analizate. "
+            "Unele competiții sau meciuri pot să nu aibă cote disponibile."
+        )
+
+    if "auto_odds_no_match" in st.session_state:
+        st.caption(
+            f"Meciuri fără potrivire API: "
+            f'{st.session_state["auto_odds_no_match"]} | '
+            f'Fără cote disponibile: '
+            f'{st.session_state["auto_odds_no_odds"]}'
+                        )
+        
+
 
         
         
