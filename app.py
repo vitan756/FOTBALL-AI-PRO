@@ -2079,6 +2079,114 @@ except Exception as eroare_analiza:
         + str(eroare_analiza)
     )
     
+# ==========================================
+# FOOTBALL AI PRO - SUPERBET BET BUILDER
+# ==========================================
+
+import streamlit as st
+import pandas as pd
+
+def superbet_bet_builder():
+    st.header("🎟️ SUPERBET BET BUILDER")
+    st.info(
+        "Generează și organizează selecțiile. "
+        "Importul direct depinde de funcțiile oficiale Superbet."
+    )
+
+    if "superbet_selections" not in st.session_state:
+        st.session_state.superbet_selections = []
+
+    st.subheader("Adaugă selecție")
+
+    with st.form("superbet_bet_form"):
+        match = st.text_input("Meci")
+        market = st.selectbox(
+            "Pronostic",
+            [
+                "1",
+                "X",
+                "2",
+                "1X",
+                "X2",
+                "Peste 1.5 goluri",
+                "Peste 2.5 goluri",
+                "Sub 2.5 goluri",
+                "Ambele marchează - DA",
+                "Ambele marchează - NU"
+            ]
+        )
+        odds = st.number_input(
+            "Cotă",
+            min_value=1.01,
+            max_value=1000.0,
+            value=1.50,
+            step=0.05
+        )
+        probability = st.number_input(
+            "Probabilitate estimată (%)",
+            min_value=1,
+            max_value=99,
+            value=70
+        )
+
+        add = st.form_submit_button("Adaugă selecția")
+
+        if add:
+            if match.strip():
+                st.session_state.superbet_selections.append({
+                    "Meci": match,
+                    "Pronostic": market,
+                    "Cotă": odds,
+                    "Probabilitate (%)": probability
+                })
+                st.success("Selecție adăugată!")
+            else:
+                st.warning("Introdu numele meciului.")
+
+    selections = st.session_state.superbet_selections
+
+    if selections:
+        df = pd.DataFrame(selections)
+
+        st.subheader("Biletul meu")
+        st.dataframe(df, use_container_width=True)
+
+        total_odds = 1.0
+        for item in selections:
+            total_odds *= item["Cotă"]
+
+        st.metric("Cotă totală estimată", f"{total_odds:.2f}")
+
+        st.download_button(
+            "Descarcă bilet CSV",
+            df.to_csv(index=False).encode("utf-8-sig"),
+            file_name="football_ai_pro_bilet.csv",
+            mime="text/csv"
+        )
+
+        text_bilet = "\n".join(
+            f'{x["Meci"]} | {x["Pronostic"]} | Cotă {x["Cotă"]}'
+            for x in selections
+        )
+
+        st.text_area(
+            "Selecții pentru Superbet",
+            value=text_bilet,
+            height=180
+        )
+
+        if st.button("Șterge toate selecțiile"):
+            st.session_state.superbet_selections = []
+            st.rerun()
+
+    else:
+        st.caption("Nu ai adăugat încă selecții.")
+
+# Afișare modul
+with st.expander("🎟️ SUPERBET BET BUILDER", expanded=False):
+    superbet_bet_builder()
+        
+    
     
     
     
